@@ -1,0 +1,7 @@
+{
+  "url": "https://mjtuheawxnvjxzhxfcgx.supabase.co",
+  "anonKey": "sb_publishable_ukG6nkkTapfloUi6kT4xQg_tsrOuF5x",
+  "enabled": true,
+  "usersTable": "utilisateurs",
+  "subscriptionsTable": "mris_subscriptions"
+}

@@ -1,0 +1,58 @@
+{
+  "registeredUsers": [
+    {
+      "id": "usr-1791744934475",
+      "userName": "Test User",
+      "userEmail": "testuser@example.com",
+      "userPhone": "+22501020304",
+      "password": "secret123",
+      "role": "client",
+      "accountStatus": "pending",
+      "registeredAt": "2026-10-11T18:55:34.475Z",
+      "lastLoginAt": "2026-10-11T18:55:34.475Z",
+      "loginCount": 1,
+      "device": "Formulaire Interne Emris",
+      "subscriptionPlan": "Essai Gratuit 7 Jours",
+      "subscriptionStatus": "trial",
+      "paymentStatus": "none",
+      "totalPaidFCFA": 0,
+      "isOnline": true,
+      "notes": "Compte enregistré en ligne via formulaire interne (table Supabase utilisateurs)"
+    },
+    {
+      "id": "usr-1791808952471",
+      "userName": "camaraesther920",
+      "userEmail": "camaraesther920@gmail.com",
+      "userPhone": "+225 07 00 00 00 00",
+      "password": "",
+      "role": "admin",
+      "accountStatus": "validated",
+      "registeredAt": "2026-10-12T12:42:32.471+00:00",
+      "lastLoginAt": "2026-10-12T12:42:32.471+00:00",
+      "loginCount": 1,
+      "device": "Mobile (Téléphone)",
+      "subscriptionPlan": "Essai 7j & Propriétaire",
+      "subscriptionStatus": "trial",
+      "paymentStatus": "none",
+      "totalPaidFCFA": 0,
+      "isOnline": true,
+      "notes": "Compte administratrice Esther"
+    }
+  ],
+  "subscriptions": [],
+  "loginEvents": [
+    {
+      "id": "evt-1791744934475",
+      "userName": "Test User",
+      "userEmail": "testuser@example.com",
+      "userPhone": "+22501020304",
+      "timestamp": "2026-10-11T18:55:34.475Z",
+      "eventType": "inscription",
+      "device": "Formulaire Interne Emris",
+      "status": "reussie",
+      "details": "Inscription interne directe via formulaire (table Supabase utilisateurs)"
+    }
+  ],
+  "whatsAppAlerts": [],
+  "lastUpdated": "2026-10-12T20:30:12.869Z"
+}

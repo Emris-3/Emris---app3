@@ -1,0 +1,6 @@
+{
+  "name": "M-Ris - Gestion des Abonnements Wave",
+  "description": "Emris le compagnon virtuel intelligent : le meilleur ami de l'utilisateur, à la fois sage, psychologue, profondément bienveillant, et doté d'un sens de l'humour chaleureux et complice inspiré de la culture urbaine ivoirienne. Module d'abonnements Wave à 35 000 FCFA/mois et essai gratuit de 7 jours.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
