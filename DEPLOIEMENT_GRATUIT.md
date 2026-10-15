@@ -80,7 +80,9 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install
+        env:
+          NODE_ENV: development
 
       - name: Build static site
         run: npm run build
@@ -98,14 +100,17 @@ jobs:
         uses: actions/deploy-pages@v4
 ```
 
-### ⚠️ Résolution des 2 erreurs courantes de GitHub Actions :
+### ⚠️ Résolution des erreurs courantes de GitHub Actions :
 
-1. **Erreur « Fichier de verrouillage des dépendances introuvable (package-lock.json) »** :
-   - Cette erreur provenait de la ligne `cache: 'npm'` dans le workflow qui cherchait obligatoirement un lockfile.
-   - Nous avons retiré `cache: 'npm'` : l'étape `Setup Node` passe désormais sans exiger de lockfile, et l'étape suivante `npm install --legacy-peer-deps` installe automatiquement tout le nécessaire.
+1. **Erreur « Build static : Error process completed with exit code 1 »** :
+   - **Cause 1** : `__dirname` dans `vite.config.ts` provoquait une erreur d'évaluation dans l'environnement ESM de Node 20. Corrigé avec `fileURLToPath(import.meta.url)`.
+   - **Cause 2** : `tailwindcss` devait être présent dans les dépendances de production (`dependencies`) pour être toujours disponible lors du build Vite.
+   - **Cause 3** : Le runner GitHub Actions pouvait omettre les dépendances de build sous `environment: github-pages`. L'ajout de `NODE_ENV: development` lors de l'installation garantit que tous les outils de build sont chargés.
 
-2. **Erreur « La branche main n'est pas autorisée à être déployée (règles de protection de l'environnement) »** :
-   - Si GitHub Pages affiche cette alerte :
+2. **Erreur « Fichier de verrouillage des dépendances introuvable (package-lock.json) »** :
+   - Retrait de `cache: 'npm'` dans le workflow pour que l'étape `Setup Node` ne bloque plus jamais.
+
+3. **Erreur « La branche main n'est pas autorisée à être déployée (règles de protection de l'environnement) »** :
    - Allez dans **Settings** > **Environments** > **`github-pages`**.
    - Sous **Deployment branches**, choisissez **All branches** ou ajoutez la branche `main`.
    - Cliquez sur **Re-run jobs** dans l'onglet **Actions**.
