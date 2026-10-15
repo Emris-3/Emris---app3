@@ -20,18 +20,18 @@
       "notes": "Compte enregistré en ligne via formulaire interne (table Supabase utilisateurs)"
     },
     {
-      "id": "usr-1791808952471",
-      "userName": "camaraesther920",
+      "id": "usr-1792098930831",
+      "userName": "Camara Esther",
       "userEmail": "camaraesther920@gmail.com",
-      "userPhone": "+225 07 00 00 00 00",
+      "userPhone": "+225 07 48 92 11 34",
       "password": "",
       "role": "admin",
       "accountStatus": "validated",
-      "registeredAt": "2026-10-12T12:42:32.471+00:00",
-      "lastLoginAt": "2026-10-12T12:42:32.471+00:00",
+      "registeredAt": "2026-10-15T21:15:30.831+00:00",
+      "lastLoginAt": "2026-10-15T21:15:30.831+00:00",
       "loginCount": 1,
       "device": "Mobile (Téléphone)",
-      "subscriptionPlan": "Essai 7j & Propriétaire",
+      "subscriptionPlan": "Essai Gratuit 7 Jours",
       "subscriptionStatus": "trial",
       "paymentStatus": "none",
       "totalPaidFCFA": 0,
@@ -54,5 +54,5 @@
     }
   ],
   "whatsAppAlerts": [],
-  "lastUpdated": "2026-10-14T16:42:04.643Z"
+  "lastUpdated": "2026-10-15T21:05:31.989Z"
 }

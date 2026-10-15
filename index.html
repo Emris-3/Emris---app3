@@ -13,8 +13,35 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   </head>
-  <body>
-    <div id="root"></div>
+  <body class="bg-slate-900">
+    <div id="root">
+      <!-- Coque visuelle ultra-rapide affichée en 0ms dès l'arrivée sur la page -->
+      <div style="min-height:100vh;background:#0F172A;color:#F8FAFC;display:flex;flex-direction:column;font-family:system-ui,-apple-system,sans-serif;">
+        <header style="height:60px;background:#1E293B;border-bottom:1px solid #334155;display:flex;align-items:center;justify-content:space-between;padding:0 16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#06B6D4,#0284C7);display:flex;align-items:center;justify-content:center;font-weight:bold;color:#ffffff;box-shadow:0 0 12px rgba(6,182,212,0.35);">✨</div>
+            <span style="font-weight:800;font-size:17px;letter-spacing:0.5px;color:#F8FAFC;">EMRIS <span style="font-size:10px;background:#F59E0B;color:#0F172A;padding:2px 5px;border-radius:5px;font-weight:800;">COMPAGNON</span></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;background:rgba(16,185,129,0.12);padding:4px 10px;border-radius:16px;border:1px solid rgba(16,185,129,0.25);">
+            <div style="width:7px;height:7px;border-radius:50%;background:#10B981;box-shadow:0 0 8px #10B981;"></div>
+            <span style="font-size:11px;color:#34D399;font-weight:700;">En ligne</span>
+          </div>
+        </header>
+
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:24px;text-align:center;">
+          <div style="position:relative;width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#06B6D4,#2563EB);display:flex;align-items:center;justify-content:center;box-shadow:0 0 25px rgba(6,182,212,0.4);margin-bottom:18px;">
+            <span style="font-size:38px;">👋</span>
+            <div style="position:absolute;bottom:0;right:0;width:18px;height:18px;border-radius:50%;background:#10B981;border:3px solid #0F172A;"></div>
+          </div>
+          <h2 style="font-size:20px;font-weight:800;margin:0 0 8px;color:#F8FAFC;letter-spacing:-0.3px;">Emris, ton compagnon virtuel</h2>
+          <p style="font-size:13px;color:#94A3B8;max-width:320px;margin:0 auto 16px;line-height:1.5;">Prêt à t'écouter, rire et échanger en toute confiance.</p>
+          <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.06);padding:8px 16px;border-radius:24px;border:1px solid rgba(255,255,255,0.1);">
+            <div style="width:8px;height:8px;border-radius:50%;background:#06B6D4;"></div>
+            <span style="font-size:12px;color:#38BDF8;font-weight:600;">Connexion immédiate en cours...</span>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

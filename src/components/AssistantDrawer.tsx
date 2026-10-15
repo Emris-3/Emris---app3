@@ -26,6 +26,9 @@ import {
   Sparkles,
   Flame,
   Volume2,
+  VolumeX,
+  Mic,
+  MicOff,
   History,
   Trash2,
   Plus,
@@ -61,6 +64,12 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [copiedChatAll, setCopiedChatAll] = useState(false);
   const [copyToast, setCopyToast] = useState<string | null>(null);
+
+  // Voice Synthesis (TTS) & Speech Recognition (STT)
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const isListeningRef = useRef(false);
+  const recognitionRef = useRef<any>(null);
 
   // Active conversation & messages
   const [currentSession, setCurrentSession] = useState<DrawerConversationSession | null>(null);
@@ -139,7 +148,17 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
 
   // Initialize conversations from localStorage on mount or when drawer opens
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+      setSpeakingMessageId(null);
+      setIsListening(false);
+      return;
+    }
 
     const all = getSavedConversations();
     setSavedConversations(all);
@@ -301,6 +320,139 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
     await copyToClipboard(`=== HISTORIQUE M-RIS : ${session.title} ===\nDate : ${session.createdAt}\n\n${transcript}`);
     setCopiedSessionId(session.id);
     setTimeout(() => setCopiedSessionId(null), 2000);
+  };
+
+  // Voice Synthesis (TTS) using Web Speech API window.speechSynthesis
+  const speakText = (text: string, msgId?: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      setCopyToast("La synthèse vocale n'est pas supportée par ce navigateur.");
+      setTimeout(() => setCopyToast(null), 3000);
+      return;
+    }
+
+    // Toggle: if currently speaking this same message, cancel/pause it
+    if (speakingMessageId === msgId && window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    // Cancel any previous speech playback
+    window.speechSynthesis.cancel();
+
+    // Clean up markdown formatting, links and emojis for natural French speech
+    const cleanText = text
+      .replace(/https?:\/\/[^\s]+/g, 'le lien officiel')
+      .replace(/[*_#`~[\]()]/g, '')
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+      .trim();
+
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'fr-FR';
+    utterance.rate = 1.0;
+    utterance.pitch = avatarGender === 'female' ? 1.15 : 0.95;
+
+    // Pick a natural French voice if installed
+    try {
+      const voices = window.speechSynthesis.getVoices();
+      const frVoice = voices.find(v => v.lang.startsWith('fr') && (avatarGender === 'female' ? /female|femme|julie|hortense|celine/i.test(v.name) : true))
+        || voices.find(v => v.lang.startsWith('fr'));
+      if (frVoice) {
+        utterance.voice = frVoice;
+      }
+    } catch {
+      // Ignore voice selection error
+    }
+
+    utterance.onstart = () => {
+      setSpeakingMessageId(msgId || 'active');
+    };
+
+    utterance.onend = () => {
+      setSpeakingMessageId(null);
+    };
+
+    utterance.onerror = () => {
+      setSpeakingMessageId(null);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Arrêt strict de la dictée vocale
+  const stopVoiceDictation = () => {
+    isListeningRef.current = false;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
+    setIsListening(false);
+  };
+
+  // Speech Recognition (STT) using Web SpeechRecognition API
+  const startVoiceDictation = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setCopyToast("La reconnaissance vocale n'est pas supportée par ce navigateur. Utilisez Google Chrome, Edge ou Safari.");
+      setTimeout(() => setCopyToast(null), 3500);
+      return;
+    }
+
+    if (isListeningRef.current) {
+      stopVoiceDictation();
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.lang = 'fr-FR';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        isListeningRef.current = true;
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        // Empêcher l'écrasement des mots saisis au clavier
+        if (!isListeningRef.current) return;
+        let transcript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript && isListeningRef.current) {
+          setInputText(transcript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('Speech recognition error:', event.error);
+        stopVoiceDictation();
+        if (event.error === 'not-allowed') {
+          setCopyToast("Accès au microphone refusé. Autorisez le micro dans les paramètres du navigateur.");
+          setTimeout(() => setCopyToast(null), 3500);
+        } else if (event.error !== 'no-speech') {
+          setCopyToast("Dictée interrompue (" + event.error + ")");
+          setTimeout(() => setCopyToast(null), 2500);
+        }
+      };
+
+      recognition.onend = () => {
+        stopVoiceDictation();
+      };
+
+      recognition.start();
+    } catch (err) {
+      console.error('Failed to start speech recognition:', err);
+      stopVoiceDictation();
+    }
   };
 
   // Send message handler with auto-saving to local storage
@@ -890,11 +1042,37 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
                       )}
                     </div>
 
-                    {/* Message Footer: Timestamp & Interactive Dynamic Copy Button */}
-                    <div className="flex items-center gap-2 mt-1 px-1">
+                    {/* Message Footer: Timestamp, Speaker Button & Interactive Dynamic Copy Button */}
+                    <div className="flex items-center gap-1.5 mt-1 px-1">
                       <span className="text-[10px] text-slate-400 font-mono-numbers">
                         {msg.time}
                       </span>
+                      <span className="text-slate-300 text-[10px]">•</span>
+
+                      {/* Small speaker button (Haut-parleur) */}
+                      <button
+                        onClick={() => speakText(msg.text, msg.id)}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                          speakingMessageId === msg.id
+                            ? 'bg-cyan-100 text-cyan-800 border border-cyan-300 font-bold shadow-xs scale-105'
+                            : 'text-slate-400 hover:text-cyan-700 hover:bg-slate-200/60'
+                        }`}
+                        title={speakingMessageId === msg.id ? "Arrêter la lecture" : "Écouter ce message à haute voix"}
+                        aria-label="Lecture vocale du message"
+                      >
+                        {speakingMessageId === msg.id ? (
+                          <>
+                            <VolumeX className="w-3.5 h-3.5 text-cyan-700 animate-pulse" />
+                            <span className="text-cyan-700">Lecture...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Volume2 className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Écouter</span>
+                          </>
+                        )}
+                      </button>
+
                       <span className="text-slate-300 text-[10px]">•</span>
                       
                       {/* Dynamic Interactive Clickable Copy Button */}
@@ -990,8 +1168,28 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
               </button>
             </div>
 
-            {/* Input box */}
+            {/* Input box with Microphone Dictation */}
             <div className="shrink-0 p-3 bg-white border-t border-slate-200 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              {/* Active voice dictation status indicator */}
+              {isListening && (
+                <div className="mb-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-50 to-amber-50 border border-rose-200/80 text-rose-700 flex items-center justify-between text-xs animate-fadeIn shadow-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600" />
+                    </span>
+                    <span className="font-semibold text-rose-800">Dictée vocale active : parlez naturellement...</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={startVoiceDictation}
+                    className="text-rose-600 hover:text-rose-900 font-bold text-[11px] underline cursor-pointer"
+                  >
+                    Arrêter
+                  </button>
+                </div>
+              )}
+
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -999,17 +1197,52 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
                 }}
                 className="flex items-center gap-2"
               >
+                {/* Microphone Button (SpeechRecognition) */}
+                <button
+                  type="button"
+                  onClick={startVoiceDictation}
+                  className={`p-2.5 rounded-xl border transition-all cursor-pointer shrink-0 ${
+                    isListening
+                      ? 'bg-rose-500 border-rose-600 text-white shadow-md shadow-rose-500/30 scale-105 animate-pulse'
+                      : 'bg-slate-100 hover:bg-slate-200/80 text-slate-600 hover:text-cyan-700 border-slate-200'
+                  }`}
+                  title={isListening ? "Arrêter la dictée vocale" : "Dicter ma question au micro (SpeechRecognition)"}
+                  aria-label="Reconnaissance vocale par microphone"
+                >
+                  {isListening ? (
+                    <MicOff className="w-4 h-4 text-white" />
+                  ) : (
+                    <Mic className="w-4 h-4 text-slate-600 hover:text-cyan-600" />
+                  )}
+                </button>
+
                 <input
                   type="text"
                   value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Écris à Emris, ton ami sûr..."
-                  className="flex-1 px-3.5 py-2 text-sm bg-slate-100 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 text-slate-900"
+                  onFocus={stopVoiceDictation}
+                  onKeyDown={() => {
+                    if (isListeningRef.current) stopVoiceDictation();
+                  }}
+                  onChange={(e) => {
+                    if (isListeningRef.current) stopVoiceDictation();
+                    setInputText(e.target.value);
+                  }}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="sentences"
+                  spellCheck={false}
+                  data-gramm="false"
+                  data-enable-grammarly="false"
+                  placeholder={isListening ? "Écoute en direct... Votre parole s'affiche ici" : "Écris ou dicte à Emris, ton ami sûr..."}
+                  className={`flex-1 px-3.5 py-2 text-sm font-sans bg-slate-100 border rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 text-slate-900 transition-all ${
+                    isListening ? 'border-rose-300 ring-2 ring-rose-200 bg-rose-50/20' : 'border-slate-200'
+                  }`}
                 />
                 <button
                   type="submit"
                   disabled={!inputText.trim() || isLoading}
-                  className="p-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="p-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0"
+                  title="Envoyer le message"
                 >
                   <Send className="w-4 h-4" />
                 </button>

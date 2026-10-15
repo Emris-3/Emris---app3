@@ -37,10 +37,10 @@ let isTtsEnabled = localStorage.getItem(STORAGE_KEYS.TTS_ENABLED) !== 'false';
 let currentMood = 'En forme';
 let isAdminUnlocked = false;
 
-// Images des avatars
+// Images des avatars optimisées en local (chargement instantané 0ms)
 const AVATARS = {
-  male: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-  female: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+  male: 'images/mris_assistant_avatar_1791391815061.jpg',
+  female: 'images/mris_avatar_female_1791394988073.jpg',
   user: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'
 };
 
@@ -541,24 +541,66 @@ function scrollChatToBottom() {
 }
 
 // Synthèse Vocale (TTS)
-function speakText(text) {
+let activeSpeakingBtn = null;
+
+function speakText(text, onEndCallback) {
   if (!('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
 
-  // Nettoyer les emojis et caractères superflus pour la voix
-  const clean = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
+  // Nettoyer les emojis, astérisques markdown et liens pour une diction naturelle
+  const clean = text
+    .replace(/https?:\/\/[^\s]+/g, 'le lien officiel')
+    .replace(/[*_#`~[\]()]/g, '')
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+    .trim();
+
+  if (!clean) return;
+
   const utterance = new SpeechSynthesisUtterance(clean);
   utterance.lang = 'fr-FR';
   utterance.rate = 1.0;
   utterance.pitch = companionGender === 'female' ? 1.15 : 0.95;
 
+  try {
+    const voices = window.speechSynthesis.getVoices();
+    const frVoice = voices.find(v => v.lang.startsWith('fr') && (companionGender === 'female' ? /female|femme|julie/i.test(v.name) : true)) || voices.find(v => v.lang.startsWith('fr'));
+    if (frVoice) utterance.voice = frVoice;
+  } catch (e) {}
+
+  utterance.onend = () => {
+    if (onEndCallback) onEndCallback();
+  };
+  utterance.onerror = () => {
+    if (onEndCallback) onEndCallback();
+  };
+
   window.speechSynthesis.speak(utterance);
 }
 
+window.speakText = speakText;
+
 window.speakMessageText = function(btn) {
+  if (btn === activeSpeakingBtn && window.speechSynthesis.speaking) {
+    window.speechSynthesis.cancel();
+    btn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+    activeSpeakingBtn = null;
+    return;
+  }
+
+  if (activeSpeakingBtn) {
+    activeSpeakingBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+  }
+
   const bubble = btn.closest('.msg-bubble');
   const text = bubble.querySelector('div:first-child').innerText;
-  speakText(text);
+
+  btn.innerHTML = '<i class="fa-solid fa-volume-xmark" style="color:#38BDF8;"></i>';
+  activeSpeakingBtn = btn;
+
+  speakText(text, () => {
+    btn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+    if (activeSpeakingBtn === btn) activeSpeakingBtn = null;
+  });
 };
 
 window.copyMessageText = function(btn) {
@@ -793,9 +835,24 @@ function initEventListeners() {
     }, 600);
   }
 
-  btnSend.addEventListener('click', handleSend);
+  // Si l'utilisateur clique ou tape au clavier, couper immédiatement la dictée pour ne pas altérer les mots saisis
+  function stopActiveVoiceRecording() {
+    if (isRecordingVoice && recognitionInstance) {
+      try { recognitionInstance.stop(); } catch(e) {}
+      isRecordingVoice = false;
+      if (btnVoiceInput) {
+        btnVoiceInput.classList.remove('recording');
+        btnVoiceInput.innerHTML = '<i class="fa-solid fa-microphone"></i>';
+      }
+      chatInput.placeholder = "Écris à Emris en toute franchise...";
+    }
+  }
+
+  chatInput.addEventListener('focus', stopActiveVoiceRecording);
+  chatInput.addEventListener('input', stopActiveVoiceRecording);
   chatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    stopActiveVoiceRecording();
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       handleSend();
     }
@@ -847,6 +904,85 @@ function initEventListeners() {
       window.speechSynthesis.cancel();
     }
   });
+
+  // Reconnaissance Vocale (SpeechRecognition) au clic sur le bouton micro
+  const btnVoiceInput = document.getElementById('btnVoiceInput');
+  let recognitionInstance = null;
+  let isRecordingVoice = false;
+
+  if (btnVoiceInput) {
+    btnVoiceInput.addEventListener('click', () => {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("La reconnaissance vocale n'est pas supportée par votre navigateur actuel. Veuillez utiliser Google Chrome, Microsoft Edge ou Safari.");
+        return;
+      }
+
+      if (isRecordingVoice && recognitionInstance) {
+        try { recognitionInstance.stop(); } catch(e) {}
+        isRecordingVoice = false;
+        btnVoiceInput.classList.remove('recording');
+        btnVoiceInput.innerHTML = '<i class="fa-solid fa-microphone"></i>';
+        chatInput.placeholder = "Écris à Emris en toute franchise...";
+        return;
+      }
+
+      try {
+        const recognition = new SpeechRecognition();
+        recognitionInstance = recognition;
+        recognition.lang = 'fr-FR';
+        recognition.continuous = false;
+        recognition.interimResults = true;
+
+        recognition.onstart = () => {
+          isRecordingVoice = true;
+          btnVoiceInput.classList.add('recording');
+          btnVoiceInput.innerHTML = '<i class="fa-solid fa-microphone-lines fa-fade" style="color:#F43F5E;"></i>';
+          chatInput.placeholder = "Écoute en direct... Parlez maintenant";
+        };
+
+        recognition.onresult = (e) => {
+          // PROTECTION : Si l'utilisateur est repassé au clavier, ignorer les paquets audio résiduels
+          if (!isRecordingVoice) return;
+          let fullTranscript = '';
+          for (let i = 0; i < e.results.length; i++) {
+            fullTranscript += e.results[i][0].transcript;
+          }
+          if (fullTranscript && isRecordingVoice) {
+            chatInput.value = fullTranscript;
+            chatInput.style.height = 'auto';
+            chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+          }
+        };
+
+        recognition.onerror = (e) => {
+          console.warn('SpeechRecognition error:', e.error);
+          isRecordingVoice = false;
+          btnVoiceInput.classList.remove('recording');
+          btnVoiceInput.innerHTML = '<i class="fa-solid fa-microphone"></i>';
+          chatInput.placeholder = "Écris à Emris en toute franchise...";
+        };
+
+        recognition.onend = () => {
+          isRecordingVoice = false;
+          btnVoiceInput.classList.remove('recording');
+          btnVoiceInput.innerHTML = '<i class="fa-solid fa-microphone"></i>';
+          chatInput.placeholder = "Écris à Emris en toute franchise...";
+          // Focus input on mobile so user can hit send or edit
+          try {
+            chatInput.focus();
+          } catch(e) {}
+        };
+
+        recognition.start();
+      } catch (err) {
+        console.error('Speech recognition start failed:', err);
+        isRecordingVoice = false;
+        btnVoiceInput.classList.remove('recording');
+        btnVoiceInput.innerHTML = '<i class="fa-solid fa-microphone"></i>';
+      }
+    });
+  }
 
   // Nettoyer la conversation
   document.getElementById('btnClearChat').addEventListener('click', () => {

@@ -499,17 +499,39 @@ body {
 }
 
 .btn-msg-action {
-  background: transparent;
-  border: none;
-  color: inherit;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 2px;
-  font-size: 0.7rem;
-  opacity: 0.7;
+  padding: 5px 8px;
+  font-size: 0.72rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 28px;
+  min-width: 28px;
+  transition: all 0.2s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.btn-msg-action:hover {
-  opacity: 1;
+.btn-msg-action:hover, .btn-msg-action:active {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #FBBF24;
+}
+
+.message-row.user .btn-msg-action {
+  background: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.15);
+  color: #0F172A;
+}
+
+.message-row.user .btn-msg-action:hover, .message-row.user .btn-msg-action:active {
+  background: rgba(0, 0, 0, 0.2);
+  color: #000;
 }
 
 /* Suggestions chips */
@@ -568,6 +590,14 @@ body {
 .btn-action-icon:hover {
   color: var(--primary);
   background: rgba(245, 158, 11, 0.1);
+}
+
+.btn-action-icon.recording {
+  background: rgba(244, 63, 94, 0.25);
+  border-color: #F43F5E;
+  color: #F43F5E;
+  box-shadow: 0 0 14px rgba(244, 63, 94, 0.45);
+  transform: scale(1.05);
 }
 
 .input-wrapper {

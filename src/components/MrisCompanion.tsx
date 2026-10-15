@@ -31,7 +31,9 @@ import {
   Layers,
   X,
   ExternalLink,
-  ChevronUp
+  ChevronUp,
+  Mic,
+  MicOff
 } from 'lucide-react';
 
 interface MrisCompanionProps {
@@ -73,6 +75,10 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const isListeningRef = useRef(false);
+  const recognitionRef = useRef<any>(null);
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
 
   // Chat conversation
@@ -189,23 +195,123 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
     return `On est ensemble, ${appel} ! J'ai bien noté ta demande : « ${text} ». Pour que je t'apporte la réponse la plus précise et directe possible, n'hésite pas à me donner un détail supplémentaire ou à relancer si la connexion a eu un court instant d'hésitation.`;
   };
 
-  const handleSpeak = (text: string) => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    if (isSpeaking) {
+  // Voice Synthesis (TTS) - speakText using Web Speech API window.speechSynthesis
+  const speakText = (text: string, msgId?: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
+    if (speakingId === msgId && isSpeaking) {
+      window.speechSynthesis.cancel();
       setIsSpeaking(false);
+      setSpeakingId(null);
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    window.speechSynthesis.cancel();
+
+    const clean = text
+      .replace(/https?:\/\/[^\s]+/g, 'le lien officiel')
+      .replace(/[*_#`~[\]()]/g, '')
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+      .trim();
+
+    if (!clean) return;
+
+    const utterance = new SpeechSynthesisUtterance(clean);
     utterance.lang = 'fr-FR';
     utterance.rate = 1.0;
     utterance.pitch = avatarGender === 'female' ? 1.15 : 0.95;
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
 
-    setIsSpeaking(true);
+    try {
+      const voices = window.speechSynthesis.getVoices();
+      const frVoice = voices.find(v => v.lang.startsWith('fr') && (avatarGender === 'female' ? /female|femme|julie|hortense|celine/i.test(v.name) : true))
+        || voices.find(v => v.lang.startsWith('fr'));
+      if (frVoice) {
+        utterance.voice = frVoice;
+      }
+    } catch {}
+
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      setSpeakingId(msgId || 'active');
+    };
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      setSpeakingId(null);
+    };
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      setSpeakingId(null);
+    };
+
     window.speechSynthesis.speak(utterance);
+  };
+
+  const handleSpeak = (text: string, msgId?: string) => {
+    speakText(text, msgId);
+  };
+
+  // Arrêt strict de la dictée vocale pour libérer le champ texte
+  const stopVoiceDictation = () => {
+    isListeningRef.current = false;
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+    }
+    setIsListening(false);
+  };
+
+  // Speech Recognition (STT) using Web SpeechRecognition
+  const startVoiceDictation = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("La reconnaissance vocale n'est pas supportée par ce navigateur. Utilisez Chrome, Edge ou Safari.");
+      return;
+    }
+
+    if (isListeningRef.current) {
+      stopVoiceDictation();
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.lang = 'fr-FR';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        isListeningRef.current = true;
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        // PROTECTION CRUCIALE : Si l'utilisateur est repassé au clavier ou a arrêté le micro, ignorer le résultat audio
+        if (!isListeningRef.current) return;
+        let transcript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript && isListeningRef.current) {
+          setInputText(transcript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('SpeechRecognition error:', event.error);
+        stopVoiceDictation();
+      };
+
+      recognition.onend = () => {
+        stopVoiceDictation();
+      };
+
+      recognition.start();
+    } catch (err) {
+      console.error('Error starting speech recognition:', err);
+      stopVoiceDictation();
+    }
   };
 
   const handleCopy = async (id: string, text: string) => {
@@ -461,12 +567,25 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
                     <>
                       <span>·</span>
                       <button
-                        onClick={() => handleSpeak(entry.text)}
-                        className="hover:text-cyan-400 text-slate-400 transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Écouter la voix de M-Ris"
+                        onClick={() => speakText(entry.text, entry.id)}
+                        className={`transition-all flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded ${
+                          speakingId === entry.id
+                            ? 'text-cyan-400 font-bold bg-cyan-500/20 scale-105'
+                            : 'hover:text-cyan-400 text-slate-400'
+                        }`}
+                        title={speakingId === entry.id ? "Arrêter la lecture" : "Écouter la réponse à haute voix"}
                       >
-                        <Volume2 className={`w-3.5 h-3.5 ${isSpeaking ? 'text-cyan-400 animate-pulse' : ''}`} />
-                        <span>Écouter</span>
+                        {speakingId === entry.id ? (
+                          <>
+                            <VolumeX className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                            <span className="text-cyan-400 font-bold">Lecture...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Volume2 className="w-3.5 h-3.5" />
+                            <span>Écouter</span>
+                          </>
+                        )}
                       </button>
                     </>
                   )}
@@ -592,44 +711,100 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
               </button>
             </div>
           ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSendMessage();
-              }}
-              className="flex items-center gap-2"
-            >
-              {/* Toggle Suggestions button */}
-              {!showSuggestions && (
-                <button
-                  type="button"
-                  onClick={() => setShowSuggestions(true)}
-                  className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-amber-300 border border-slate-700 transition-colors shrink-0 cursor-pointer"
-                  title="Afficher les suggestions rapides"
-                >
-                  <Lightbulb className="w-4 h-4" />
-                </button>
+            <>
+              {/* Active voice dictation banner */}
+              {isListening && (
+                <div className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-950/80 to-amber-950/80 border border-rose-500/50 text-rose-200 flex items-center justify-between text-xs animate-fadeIn shadow-lg">
+                  <div className="flex items-center gap-2.5">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500" />
+                    </span>
+                    <span className="font-semibold text-rose-200">Reconnaissance vocale active : dictez votre message...</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={startVoiceDictation}
+                    className="text-rose-400 hover:text-white font-bold text-xs underline cursor-pointer"
+                  >
+                    Arrêter
+                  </button>
+                </div>
               )}
 
-              {/* Text Input */}
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder="Confie-toi à Emris (ton meilleur ami sage, psychologue & complice)..."
-                className="flex-1 px-4 py-3 sm:py-3.5 text-sm sm:text-base bg-slate-900 text-white placeholder-slate-400 border border-slate-700/80 rounded-2xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all shadow-inner"
-              />
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={!inputText.trim() || isLoading}
-                className="p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-cyan-500/20 cursor-pointer shrink-0"
-                title="Envoyer le message"
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendMessage();
+                }}
+                className="flex items-center gap-2"
               >
-                <Send className="w-5 h-5" />
-              </button>
-            </form>
+                {/* Toggle Suggestions button */}
+                {!showSuggestions && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSuggestions(true)}
+                    className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-amber-300 border border-slate-700 transition-colors shrink-0 cursor-pointer"
+                    title="Afficher les suggestions rapides"
+                  >
+                    <Lightbulb className="w-4 h-4" />
+                  </button>
+                )}
+
+                {/* Microphone Dictation Button (SpeechRecognition) */}
+                <button
+                  type="button"
+                  onClick={startVoiceDictation}
+                  className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer shrink-0 ${
+                    isListening
+                      ? 'bg-rose-600 border-rose-500 text-white shadow-lg shadow-rose-600/40 animate-pulse scale-105'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-400 border-slate-700'
+                  }`}
+                  title={isListening ? "Arrêter la dictée vocale" : "Dicter ma question au micro (SpeechRecognition)"}
+                  aria-label="Reconnaissance vocale par microphone"
+                >
+                  {isListening ? (
+                    <MicOff className="w-5 h-5 text-white" />
+                  ) : (
+                    <Mic className="w-5 h-5" />
+                  )}
+                </button>
+
+                {/* Text Input sécurisé contre l'auto-correction intempestive et les conflits audio */}
+                <input
+                  type="text"
+                  value={inputText}
+                  onFocus={stopVoiceDictation}
+                  onKeyDown={() => {
+                    if (isListeningRef.current) stopVoiceDictation();
+                  }}
+                  onChange={(e) => {
+                    if (isListeningRef.current) stopVoiceDictation();
+                    setInputText(e.target.value);
+                  }}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="sentences"
+                  spellCheck={false}
+                  data-gramm="false"
+                  data-enable-grammarly="false"
+                  placeholder={isListening ? "Écoute en cours... Dictez librement" : "Confie-toi à Emris (ou dicte au micro)..."}
+                  className={`flex-1 px-4 py-3 sm:py-3.5 text-sm sm:text-base font-sans bg-slate-900 text-white placeholder-slate-400 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all shadow-inner ${
+                    isListening ? 'border-rose-400 ring-2 ring-rose-500/30' : 'border-slate-700/80'
+                  }`}
+                />
+
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={!inputText.trim() || isLoading}
+                  className="p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-cyan-500/20 cursor-pointer shrink-0"
+                  title="Envoyer le message"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              </form>
+            </>
           )}
 
         </div>

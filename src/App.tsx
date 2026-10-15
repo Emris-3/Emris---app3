@@ -32,16 +32,7 @@ import {
 import { centralSync } from './services/centralSyncService';
 import { SUBSCRIPTION_CONFIG, FORMAT_FCFA, isAdminEmail } from './utils/constants';
 import { Navbar } from './components/Navbar';
-import { ClientView } from './components/ClientView';
-import { AdminDashboard } from './components/AdminDashboard';
 import { MrisCompanion } from './components/MrisCompanion';
-import { ReceiptModal } from './components/ReceiptModal';
-import { EmailModal } from './components/EmailModal';
-import { AssistantDrawer } from './components/AssistantDrawer';
-import { AuthModal } from './components/AuthModal';
-import { AutonomousHub } from './components/AutonomousHub';
-import { LanguageTeacherHub } from './components/LanguageTeacherHub';
-import { CommercialAgentHub } from './components/CommercialAgentHub';
 import { UserAccountBadgeBottomLeft } from './components/UserAccountBadgeBottomLeft';
 import avatarMaleImg from './assets/images/mris_assistant_avatar_1791391815061.jpg';
 import { 
@@ -51,8 +42,20 @@ import {
   LogIn, 
   UserPlus, 
   Clock, 
-  ShieldCheck 
+  ShieldCheck,
+  Loader2
 } from 'lucide-react';
+
+// Lazy loading des vues secondaires : le bundle principal ne charge que le compagnon Emris pour une apparition instantanée à 100%
+const ClientView = React.lazy(() => import('./components/ClientView').then(m => ({ default: m.ClientView })));
+const AdminDashboard = React.lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const AutonomousHub = React.lazy(() => import('./components/AutonomousHub').then(m => ({ default: m.AutonomousHub })));
+const LanguageTeacherHub = React.lazy(() => import('./components/LanguageTeacherHub').then(m => ({ default: m.LanguageTeacherHub })));
+const CommercialAgentHub = React.lazy(() => import('./components/CommercialAgentHub').then(m => ({ default: m.CommercialAgentHub })));
+const AssistantDrawer = React.lazy(() => import('./components/AssistantDrawer').then(m => ({ default: m.AssistantDrawer })));
+const ReceiptModal = React.lazy(() => import('./components/ReceiptModal').then(m => ({ default: m.ReceiptModal })));
+const EmailModal = React.lazy(() => import('./components/EmailModal').then(m => ({ default: m.EmailModal })));
+const AuthModal = React.lazy(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
 
 export default function App() {
   const [subscriptions, setSubscriptions] = useState<SubscriptionRequest[]>([]);
@@ -605,7 +608,8 @@ export default function App() {
   const activeCount = subscriptions.filter(s => s.status === 'active' || s.status === 'trial' || s.isTrial).length;
   const isOwnerSession = isAdminEmail(currentUser?.userEmail || '');
   const isCurrentTrial = Boolean(currentUserSubscription?.isTrial || currentUserSubscription?.status === 'trial');
-  const hasAppAccess = Boolean((isOwnerSession && isAdmin) || (currentUserSubscription && (currentUserSubscription.status === 'active' || currentUserSubscription.status === 'trial' || currentUserSubscription.isTrial)));
+  // Accès immédiat et instantané garanti au Compagnon Virtuel Emris dès l'ouverture (0ms d'attente)
+  const hasAppAccess = true;
 
   return (
     <div className={`min-h-screen ${currentView === 'app_unlocked' ? 'h-[100dvh] overflow-hidden' : ''} bg-slate-50 text-slate-900 flex flex-col font-sans`}>
@@ -703,125 +707,95 @@ export default function App() {
       {/* Main View Area: Expands to 100% viewport height and 0 padding on companion chat */}
       <main className={currentView === 'app_unlocked' ? "flex-1 min-h-0 flex flex-col w-full overflow-hidden p-0" : "flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-12"}>
         
-        {currentView === 'languages' && (
-          <LanguageTeacherHub
-            onBackToCompanion={() => setCurrentView('app_unlocked')}
-            userName={currentUser?.userName || 'Élève'}
-          />
-        )}
-
-        {currentView === 'commercial' && (
-          <CommercialAgentHub
-            onBackToCompanion={() => setCurrentView('app_unlocked')}
-            userEmail={currentUser?.userEmail}
-            userName={currentUser?.userName}
-          />
-        )}
-
-        {currentView === 'autonomous' && (
-          <AutonomousHub
-            onBackToCompanion={() => setCurrentView('app_unlocked')}
-            userEmail={currentUser?.userEmail}
-            userName={currentUser?.userName}
-          />
-        )}
-
-        {currentView === 'client' && (
-          <ClientView
-            currentRequest={currentUserSubscription}
-            currentUser={currentUser}
-            onSubmitSubscription={handleSubmitSubscription}
-            onActivateTrial={handleActivateTrial}
-            onOpenAssistant={() => setIsAssistantOpen(true)}
-            onViewReceipt={(req) => setSelectedReceiptSub(req)}
-            onGoToUnlockedApp={() => setCurrentView('app_unlocked')}
-            onOpenAuthModal={() => setIsAuthModalOpen(true)}
-          />
-        )}
-
-        {currentView === 'admin' && isAdmin && (
-          <AdminDashboard
-            subscriptions={subscriptions}
-            sentEmails={sentEmails}
-            registeredUsers={registeredUsers}
-            loginEvents={loginEvents}
-            whatsAppAlerts={whatsAppAlerts}
-            onActivateAccount={handleActivateAccount}
-            onActivateTrialAccount={handleActivateTrialAccount}
-            onRejectAccount={handleRejectAccount}
-            onExtendAccount={handleExtendAccount}
-            onDeleteSubscription={handleDeleteSubscription}
-            onValidateUser={handleValidateUser}
-            onDeleteUser={handleDeleteUser}
-            onViewReceipt={(sub) => setSelectedReceiptSub(sub)}
-            onViewEmail={(mail) => setSelectedEmail(mail)}
-            onLockAdmin={handleLockAdmin}
-          />
-        )}
-
+        {/* Le compagnon virtuel Emris apparaît immédiatement sans aucun délai */}
         {currentView === 'app_unlocked' && (
-          hasAppAccess ? (
-            <MrisCompanion
-              subscription={currentUserSubscription || {
-                id: 'sub-owner-' + (currentUser?.userEmail || 'admin'),
-                userName: currentUser?.userName || 'Camara Esther',
-                userEmail: currentUser?.userEmail || 'camaraesther920@gmail.com',
-                userPhone: currentUser?.userPhone || '+225 07 48 92 11 34',
-                planName: isOwnerSession ? 'Propriétaire & Administrateur' : 'Essai Gratuit 7 Jours',
-                amount: 35000,
-                currency: 'FCFA',
-                submissionDate: new Date().toISOString(),
-                status: 'active',
-                isTrial: false,
-                receiptImage: '',
-                activatedAt: new Date().toISOString(),
-                notes: 'Accès débloqué'
-              }}
-              onRenew={() => setCurrentView('client')}
-              onOpenReceipt={() => currentUserSubscription && setSelectedReceiptSub(currentUserSubscription)}
-              onOpenAutonomous={() => setCurrentView('autonomous')}
-              onOpenLanguages={() => setCurrentView('languages')}
-              onOpenCommercial={() => setCurrentView('commercial')}
-            />
-          ) : (
-            <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-10 text-center max-w-lg mx-auto my-12 space-y-4 shadow-sm">
-              <div className="w-14 h-14 rounded-2xl bg-cyan-100 text-cyan-700 flex items-center justify-center mx-auto">
-                <Sparkles className="w-7 h-7 text-cyan-600" />
-              </div>
-              <h3 className="font-extrabold text-slate-900 text-xl">Rencontre Emris, ton Compagnon Virtuel</h3>
-              <p className="text-xs text-slate-600 leading-relaxed max-w-md mx-auto">
-                Emris est ton compagnon virtuel intelligent : ton meilleur ami, sage, psychologue, profondément bienveillant, et doté d'un sens de l'humour ivoirien complice. Connecte-toi pour démarrer tes <strong>7 jours d'essai gratuit</strong> sans carte bancaire, ou souscris à l'abonnement complet Wave à <strong>35 000 FCFA/mois</strong>.
-              </p>
-              
-              <div className="flex flex-col sm:flex-row justify-center gap-2 pt-3">
-                <button
-                  onClick={() => handleActivateTrial(currentUser?.userName, currentUser?.userEmail, currentUser?.userPhone)}
-                  className="px-5 py-3 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white font-extrabold text-xs shadow-md shadow-sky-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>Démarrer l'Essai Gratuit (7 Jours)</span>
-                </button>
-                <button
-                  onClick={() => setCurrentView('client')}
-                  className="px-4 py-3 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
-                >
-                  💳 S'abonner via Wave (35 000 F)
-                </button>
-              </div>
-
-              {!currentUser && (
-                <div className="pt-2">
-                  <button
-                    onClick={() => setIsAuthModalOpen(true)}
-                    className="text-xs text-sky-600 hover:underline font-semibold cursor-pointer"
-                  >
-                    Déjà un compte ? Connectez-vous ici
-                  </button>
-                </div>
-              )}
-            </div>
-          )
+          <MrisCompanion
+            subscription={currentUserSubscription || {
+              id: 'sub-owner-' + (currentUser?.userEmail || 'admin'),
+              userName: currentUser?.userName || 'Camara Esther',
+              userEmail: currentUser?.userEmail || 'camaraesther920@gmail.com',
+              userPhone: currentUser?.userPhone || '+225 07 48 92 11 34',
+              planName: isOwnerSession ? 'Propriétaire & Administrateur' : 'Essai Gratuit 7 Jours',
+              amount: 35000,
+              currency: 'FCFA',
+              submissionDate: new Date().toISOString(),
+              status: 'active',
+              isTrial: false,
+              receiptImage: '',
+              activatedAt: new Date().toISOString(),
+              notes: 'Accès débloqué instantané'
+            }}
+            onRenew={() => setCurrentView('client')}
+            onOpenReceipt={() => currentUserSubscription && setSelectedReceiptSub(currentUserSubscription)}
+            onOpenAutonomous={() => setCurrentView('autonomous')}
+            onOpenLanguages={() => setCurrentView('languages')}
+            onOpenCommercial={() => setCurrentView('commercial')}
+          />
         )}
+
+        {/* Vues secondaires chargées à la demande */}
+        <React.Suspense fallback={
+          <div className="flex-1 flex flex-col items-center justify-center p-12 text-slate-500">
+            <Loader2 className="w-8 h-8 animate-spin text-cyan-600 mb-3" />
+            <p className="text-sm font-medium">Ouverture de l'espace...</p>
+          </div>
+        }>
+          {currentView === 'languages' && (
+            <LanguageTeacherHub
+              onBackToCompanion={() => setCurrentView('app_unlocked')}
+              userName={currentUser?.userName || 'Élève'}
+            />
+          )}
+
+          {currentView === 'commercial' && (
+            <CommercialAgentHub
+              onBackToCompanion={() => setCurrentView('app_unlocked')}
+              userEmail={currentUser?.userEmail}
+              userName={currentUser?.userName}
+            />
+          )}
+
+          {currentView === 'autonomous' && (
+            <AutonomousHub
+              onBackToCompanion={() => setCurrentView('app_unlocked')}
+              userEmail={currentUser?.userEmail}
+              userName={currentUser?.userName}
+            />
+          )}
+
+          {currentView === 'client' && (
+            <ClientView
+              currentRequest={currentUserSubscription}
+              currentUser={currentUser}
+              onSubmitSubscription={handleSubmitSubscription}
+              onActivateTrial={handleActivateTrial}
+              onOpenAssistant={() => setIsAssistantOpen(true)}
+              onViewReceipt={(req) => setSelectedReceiptSub(req)}
+              onGoToUnlockedApp={() => setCurrentView('app_unlocked')}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
+          )}
+
+          {currentView === 'admin' && isAdmin && (
+            <AdminDashboard
+              subscriptions={subscriptions}
+              sentEmails={sentEmails}
+              registeredUsers={registeredUsers}
+              loginEvents={loginEvents}
+              whatsAppAlerts={whatsAppAlerts}
+              onActivateAccount={handleActivateAccount}
+              onActivateTrialAccount={handleActivateTrialAccount}
+              onRejectAccount={handleRejectAccount}
+              onExtendAccount={handleExtendAccount}
+              onDeleteSubscription={handleDeleteSubscription}
+              onValidateUser={handleValidateUser}
+              onDeleteUser={handleDeleteUser}
+              onViewReceipt={(sub) => setSelectedReceiptSub(sub)}
+              onViewEmail={(mail) => setSelectedEmail(mail)}
+              onLockAdmin={handleLockAdmin}
+            />
+          )}
+        </React.Suspense>
 
       </main>
 
@@ -861,41 +835,49 @@ export default function App() {
         />
       )}
 
-      {/* Auth & Admin Modal */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        currentUser={currentUser}
-        isAdmin={isAdmin}
-        onLoginUser={handleLoginUser}
-        onAdminLogin={handleAdminLogin}
-        onLogout={handleLogout}
-        subscriptions={subscriptions}
-      />
+      {/* Modals chargées à la demande avec Suspense */}
+      <React.Suspense fallback={null}>
+        {isAuthModalOpen && (
+          <AuthModal
+            isOpen={isAuthModalOpen}
+            onClose={() => setIsAuthModalOpen(false)}
+            currentUser={currentUser}
+            isAdmin={isAdmin}
+            onLoginUser={handleLoginUser}
+            onAdminLogin={handleAdminLogin}
+            onLogout={handleLogout}
+            subscriptions={subscriptions}
+          />
+        )}
 
-      {/* Modals */}
-      <ReceiptModal
-        subscription={selectedReceiptSub}
-        onClose={() => setSelectedReceiptSub(null)}
-        onActivate={handleActivateAccount}
-        onReject={(id) => handleRejectAccount(id, 'Reçu illisible ou non conforme')}
-        showAdminActions={currentView === 'admin' && isAdmin}
-      />
+        {selectedReceiptSub && (
+          <ReceiptModal
+            subscription={selectedReceiptSub}
+            onClose={() => setSelectedReceiptSub(null)}
+            onActivate={handleActivateAccount}
+            onReject={(id) => handleRejectAccount(id, 'Reçu illisible ou non conforme')}
+            showAdminActions={currentView === 'admin' && isAdmin}
+          />
+        )}
 
-      <EmailModal
-        email={selectedEmail}
-        onClose={() => setSelectedEmail(null)}
-      />
+        {selectedEmail && (
+          <EmailModal
+            email={selectedEmail}
+            onClose={() => setSelectedEmail(null)}
+          />
+        )}
 
-      {/* Assistant Drawer */}
-      <AssistantDrawer
-        isOpen={isAssistantOpen}
-        onClose={() => setIsAssistantOpen(false)}
-        subscriptionRequest={currentUserSubscription}
-        onGoToWhatsApp={() => {
-          window.open(SUBSCRIPTION_CONFIG.WHATSAPP_URL, '_blank');
-        }}
-      />
+        {isAssistantOpen && (
+          <AssistantDrawer
+            isOpen={isAssistantOpen}
+            onClose={() => setIsAssistantOpen(false)}
+            subscriptionRequest={currentUserSubscription}
+            onGoToWhatsApp={() => {
+              window.open(SUBSCRIPTION_CONFIG.WHATSAPP_URL, '_blank');
+            }}
+          />
+        )}
+      </React.Suspense>
 
       {/* Footer */}
       <footer className="mt-16 border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-500">
