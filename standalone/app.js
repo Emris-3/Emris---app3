@@ -564,12 +564,39 @@ window.speakMessageText = function(btn) {
 window.copyMessageText = function(btn) {
   const bubble = btn.closest('.msg-bubble');
   const text = bubble.querySelector('div:first-child').innerText;
-  navigator.clipboard.writeText(text).then(() => {
-    btn.innerHTML = '<i class="fa-solid fa-check text-emerald-400"></i>';
+
+  const setSuccess = () => {
+    btn.innerHTML = '<i class="fa-solid fa-check" style="color:#34D399;"></i> <span style="font-size:0.65rem;font-weight:700;color:#34D399;margin-left:3px;">Copié !</span>';
     setTimeout(() => {
       btn.innerHTML = '<i class="fa-regular fa-copy"></i>';
-    }, 1500);
-  });
+    }, 2000);
+  };
+
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(setSuccess).catch(() => {
+      fallbackCopy(text, setSuccess);
+    });
+  } else {
+    fallbackCopy(text, setSuccess);
+  }
+
+  function fallbackCopy(val, cb) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = val;
+      ta.style.position = 'fixed';
+      ta.style.left = '-999999px';
+      ta.style.top = '-999999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      cb();
+    } catch (e) {
+      console.error('Fallback copy error:', e);
+    }
+  }
 };
 
 // =========================================================================

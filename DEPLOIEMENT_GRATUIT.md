@@ -40,9 +40,75 @@ Le fichier de déploiement automatique `.github/workflows/deploy.yml` a été aj
 1. Poussez votre code sur GitHub (branche `main` ou `master`).
 2. Sur la page de votre dépôt GitHub, cliquez sur **Settings** (Paramètres).
 3. Dans le menu de gauche, cliquez sur **Pages**.
-4. Sous **Build and deployment** > **Source**, sélectionnez **GitHub Actions**.
+4. Sous **Build and deployment** > **Source**, sélectionnez **GitHub Actions** (impératif pour activer le workflow automatisé).
 5. Allez dans l'onglet **Actions** de votre dépôt : le workflow `Deploy to GitHub Pages` va s'exécuter et publier votre site.
 6. L'adresse de votre application sera : `https://<votre-pseudo-github>.github.io/<nom-du-depot>/`.
+
+### Contenu complet du fichier `.github/workflows/deploy.yml` :
+Si vous modifiez directement le fichier sur GitHub, copiez-collez cette version exacte (sans `cache: 'npm'`) :
+
+```yaml
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build static site
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+```
+
+### ⚠️ Résolution des 2 erreurs courantes de GitHub Actions :
+
+1. **Erreur « Fichier de verrouillage des dépendances introuvable (package-lock.json) »** :
+   - Cette erreur provenait de la ligne `cache: 'npm'` dans le workflow qui cherchait obligatoirement un lockfile.
+   - Nous avons retiré `cache: 'npm'` : l'étape `Setup Node` passe désormais sans exiger de lockfile, et l'étape suivante `npm install --legacy-peer-deps` installe automatiquement tout le nécessaire.
+
+2. **Erreur « La branche main n'est pas autorisée à être déployée (règles de protection de l'environnement) »** :
+   - Si GitHub Pages affiche cette alerte :
+   - Allez dans **Settings** > **Environments** > **`github-pages`**.
+   - Sous **Deployment branches**, choisissez **All branches** ou ajoutez la branche `main`.
+   - Cliquez sur **Re-run jobs** dans l'onglet **Actions**.
 
 ---
 

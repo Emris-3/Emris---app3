@@ -57,6 +57,11 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
 
+  // Dynamic interactive copy-to-clipboard state
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [copiedChatAll, setCopiedChatAll] = useState(false);
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+
   // Active conversation & messages
   const [currentSession, setCurrentSession] = useState<DrawerConversationSession | null>(null);
   const [messages, setMessages] = useState<DrawerChatMessage[]>([]);
@@ -219,15 +224,81 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
     handleStartNewChat();
   };
 
+  // Robust clipboard copy with fallback
+  const copyToClipboard = async (text: string): Promise<boolean> => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (err) {
+      console.warn('Clipboard API error, fallback triggered:', err);
+    }
+
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      textArea.setAttribute('readonly', '');
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const success = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      return success;
+    } catch (fallbackErr) {
+      console.error('Copy fallback failed:', fallbackErr);
+      return false;
+    }
+  };
+
+  // Copy individual message text to clipboard with dynamic interactive feedback
+  const handleCopyMessage = async (msgId: string, text: string) => {
+    const success = await copyToClipboard(text);
+    if (success) {
+      setCopiedMessageId(msgId);
+      setCopyToast('Texte copié dans le presse-papier !');
+      setTimeout(() => {
+        setCopiedMessageId((prev) => (prev === msgId ? null : prev));
+      }, 2200);
+      setTimeout(() => {
+        setCopyToast((prev) => (prev === 'Texte copié dans le presse-papier !' ? null : prev));
+      }, 2500);
+    }
+  };
+
+  // Copy entire active chat conversation
+  const handleCopyCurrentChat = async () => {
+    if (messages.length === 0) return;
+    const title = currentSession?.title || 'Échange avec Emris';
+    const transcript = messages.map(m => {
+      const senderName = m.sender === 'user' ? 'Vous' : 'Emris';
+      return `[${m.time}] ${senderName} :\n${m.text}\n`;
+    }).join('\n');
+
+    const fullTranscript = `=== CONVERSATION EMRIS : ${title} ===\nDate : ${new Date().toLocaleDateString('fr-FR')}\n\n${transcript}`;
+    const success = await copyToClipboard(fullTranscript);
+    if (success) {
+      setCopiedChatAll(true);
+      setCopyToast('Discussion complète copiée !');
+      setTimeout(() => setCopiedChatAll(false), 2200);
+      setTimeout(() => {
+        setCopyToast((prev) => (prev === 'Discussion complète copiée !' ? null : prev));
+      }, 2500);
+    }
+  };
+
   // Copy whole conversation transcript to clipboard
-  const handleCopyTranscript = (session: DrawerConversationSession, e: React.MouseEvent) => {
+  const handleCopyTranscript = async (session: DrawerConversationSession, e: React.MouseEvent) => {
     e.stopPropagation();
     const transcript = session.messages.map(m => {
       const role = m.sender === 'user' ? 'Vous' : 'M-Ris';
       return `[${m.time}] ${role} :\n${m.text}\n`;
     }).join('\n');
 
-    navigator.clipboard.writeText(`=== HISTORIQUE M-RIS : ${session.title} ===\nDate : ${session.createdAt}\n\n${transcript}`);
+    await copyToClipboard(`=== HISTORIQUE M-RIS : ${session.title} ===\nDate : ${session.createdAt}\n\n${transcript}`);
     setCopiedSessionId(session.id);
     setTimeout(() => setCopiedSessionId(null), 2000);
   };
@@ -382,21 +453,48 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
         {/* Main Drawer Header */}
         <div className="bg-slate-900 text-white p-4 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="relative">
+            {/* Emris Avatar with breathing animation and responsive glow */}
+            <div className="relative flex items-center justify-center">
+              {/* Subtle ambient breathing halo ring */}
+              <div 
+                className={`absolute -inset-1 rounded-full bg-cyan-400/25 blur-xs transition-all pointer-events-none ${
+                  isLoading ? 'animate-avatar-thinking' : 'animate-avatar-ring'
+                }`}
+                aria-hidden="true"
+              />
+              
               <img
                 src={avatarSrc}
                 alt="Assistant Emris"
-                className="w-10 h-10 rounded-full object-cover border-2 border-cyan-400"
+                className={`relative w-10 h-10 rounded-full object-cover border-2 border-cyan-400 shadow-sm transition-all ${
+                  isLoading ? 'animate-avatar-thinking' : 'animate-avatar-breathe'
+                }`}
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = 'none';
                 }}
               />
-              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-slate-900" />
+              
+              {/* Responsive live status beacon */}
+              <span 
+                className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-slate-900 transition-colors ${
+                  isLoading ? 'bg-cyan-400 animate-ping' : 'bg-emerald-500'
+                }`} 
+              />
+              <span 
+                className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-slate-900 ${
+                  isLoading ? 'bg-cyan-400' : 'bg-emerald-500'
+                }`} 
+                title={isLoading ? 'Emris est en train de répondre...' : 'Emris est en direct et disponible'}
+              />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
                 <h3 className="font-bold text-sm text-white">Emris le Compagnon</h3>
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-semibold">En direct</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold transition-colors ${
+                  isLoading ? 'bg-cyan-500/30 text-cyan-200 animate-pulse' : 'bg-cyan-500/20 text-cyan-300'
+                }`}>
+                  {isLoading ? 'Réfléchit...' : 'En direct'}
+                </span>
               </div>
               <p className="text-[11px] text-slate-400">Sage, psychologue complice & soutien Wave</p>
             </div>
@@ -647,8 +745,16 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
           /* ================================================================ */
           /* VIEW 2: NORMAL ACTIVE CHAT VIEW                                 */
           /* ================================================================ */
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden relative">
             
+            {/* Dynamic Interactive Copy Floating Toast Notification */}
+            {copyToast && (
+              <div className="pointer-events-none absolute top-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-3.5 py-1.5 bg-slate-900/95 text-white rounded-full shadow-xl border border-cyan-400/40 text-xs font-semibold animate-fadeIn backdrop-blur-xs">
+                <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>{copyToast}</span>
+              </div>
+            )}
+
             {/* Conversation Session Header Bar */}
             <div className="bg-slate-100/80 border-b border-slate-200/80 px-3.5 py-2 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2 min-w-0">
@@ -658,6 +764,29 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
                 </span>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
+                {/* Dynamic Button: Copy Entire Conversation */}
+                <button
+                  onClick={handleCopyCurrentChat}
+                  className={`px-2 py-0.5 rounded-md border text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer ${
+                    copiedChatAll
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-700 font-bold scale-105'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                  title="Copier toute la discussion en cours dans le presse-papier"
+                >
+                  {copiedChatAll ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-600" />
+                      <span>Copié !</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3 text-cyan-600" />
+                      <span>Copier tout</span>
+                    </>
+                  )}
+                </button>
+
                 <button
                   onClick={handleStartNewChat}
                   className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
@@ -695,42 +824,125 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
+                  className={`flex gap-2.5 ${msg.sender === 'user' ? 'justify-end' : 'justify-start items-start'}`}
                 >
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-xs ${
-                      msg.sender === 'user'
-                        ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white rounded-br-none'
-                        : 'bg-white text-slate-800 border border-slate-200/70 rounded-bl-none'
-                    }`}
-                  >
-                    <p className="whitespace-pre-line">{msg.text}</p>
-                    {msg.action && (
-                      <div className="mt-3 pt-2.5 border-t border-slate-100">
-                        <button
-                          onClick={() => {
-                            if (msg.action?.type === 'whatsapp' || onGoToWhatsApp) {
-                              onGoToWhatsApp();
-                            }
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-colors cursor-pointer"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                          <span>{msg.action.label}</span>
-                        </button>
-                      </div>
-                    )}
+                  {msg.sender === 'mris' && (
+                    <div className="relative shrink-0 pt-0.5" title="Emris le Compagnon">
+                      <img
+                        src={avatarSrc}
+                        alt="Emris"
+                        className="w-7 h-7 rounded-full object-cover border border-cyan-400 animate-avatar-breathe shadow-xs"
+                      />
+                      <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-white" />
+                    </div>
+                  )}
+                  <div className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'} max-w-[85%]`}>
+                    <div
+                      className={`relative w-full rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-xs transition-all ${
+                        msg.sender === 'user'
+                          ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white rounded-br-none'
+                          : 'bg-white text-slate-800 border border-slate-200/70 rounded-tl-none hover:border-slate-300'
+                      }`}
+                    >
+                      <p className="whitespace-pre-line">{msg.text}</p>
+                      
+                      {/* Action buttons embedded in message */}
+                      {(msg.action || msg.text.includes('pay.wave.com')) && (
+                        <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center gap-2">
+                          {msg.action && (
+                            <button
+                              onClick={() => {
+                                if (msg.action?.type === 'whatsapp' || onGoToWhatsApp) {
+                                  onGoToWhatsApp();
+                                }
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-colors cursor-pointer"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                              <span>{msg.action.label}</span>
+                            </button>
+                          )}
+
+                          {msg.text.includes('pay.wave.com') && (
+                            <button
+                              onClick={() => handleCopyMessage('wave-url-' + msg.id, 'https://pay.wave.com/m/M_ci_Xs2kjjsivE5V/c/ci/')}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                                copiedMessageId === 'wave-url-' + msg.id
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700 font-bold'
+                                  : 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-200'
+                              }`}
+                              title="Copier le lien Wave officiel"
+                            >
+                              {copiedMessageId === 'wave-url-' + msg.id ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>Lien Wave copié !</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5 text-sky-600" />
+                                  <span>Copier le lien Wave</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Message Footer: Timestamp & Interactive Dynamic Copy Button */}
+                    <div className="flex items-center gap-2 mt-1 px-1">
+                      <span className="text-[10px] text-slate-400 font-mono-numbers">
+                        {msg.time}
+                      </span>
+                      <span className="text-slate-300 text-[10px]">•</span>
+                      
+                      {/* Dynamic Interactive Clickable Copy Button */}
+                      <button
+                        onClick={() => handleCopyMessage(msg.id, msg.text)}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                          copiedMessageId === msg.id
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 font-bold scale-105 shadow-xs'
+                            : 'text-slate-400 hover:text-slate-800 hover:bg-slate-200/60'
+                        }`}
+                        title="Copier ce message dans le presse-papier"
+                        aria-label="Copier le message dans le presse-papier"
+                      >
+                        {copiedMessageId === msg.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                            <span className="text-emerald-700">Copié !</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-slate-400 hover:text-cyan-600" />
+                            <span>Copier</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                  <span className="text-[10px] text-slate-400 mt-1 px-1 font-mono-numbers">
-                    {msg.time}
-                  </span>
                 </div>
               ))}
 
               {isLoading && (
-                <div className="flex items-center gap-2 text-xs text-slate-500 italic p-2 bg-white rounded-xl border border-slate-200/60 w-fit">
-                  <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-                  <span>Emris réfléchit avec sagesse et bienveillance...</span>
+                <div className="flex items-center gap-2.5 text-xs text-slate-600 p-2.5 bg-white rounded-2xl border border-slate-200/80 shadow-xs w-fit">
+                  <div className="relative shrink-0">
+                    <img
+                      src={avatarSrc}
+                      alt="Emris en réflexion"
+                      className="w-6 h-6 rounded-full object-cover border border-cyan-400 animate-avatar-thinking"
+                    />
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                  </div>
+                  <div className="flex items-center gap-1.5 italic text-slate-500 font-medium">
+                    <span className="flex gap-1 items-center">
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </span>
+                    <span>Emris réfléchit avec sagesse et bienveillance...</span>
+                  </div>
                 </div>
               )}
 

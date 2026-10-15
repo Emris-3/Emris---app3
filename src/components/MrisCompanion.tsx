@@ -208,10 +208,39 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
     window.speechSynthesis.speak(utterance);
   };
 
-  const handleCopy = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+  const handleCopy = async (id: string, text: string) => {
+    let success = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        success = true;
+      }
+    } catch {
+      // Fallback below
+    }
+
+    if (!success) {
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        textArea.setAttribute('readonly', '');
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        success = document.execCommand('copy');
+        document.body.removeChild(textArea);
+      } catch (e) {
+        console.error('Copy fallback error:', e);
+      }
+    }
+
+    if (success) {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2200);
+    }
   };
 
   const moodList = [
@@ -233,15 +262,30 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
           
           {/* Avatar, Identity & Status */}
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="relative shrink-0">
+            <div className="relative shrink-0 flex items-center justify-center">
+              <div 
+                className={`absolute -inset-1 rounded-2xl bg-cyan-400/20 blur-xs transition-all pointer-events-none ${
+                  isLoading ? 'animate-avatar-thinking' : 'animate-avatar-ring'
+                }`}
+                aria-hidden="true"
+              />
               <img
                 src={avatarSrc}
                 alt={avatarName}
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl object-cover border-2 border-cyan-400 shadow-md"
+                className={`relative w-10 h-10 sm:w-11 sm:h-11 rounded-2xl object-cover border-2 border-cyan-400 shadow-md transition-transform ${
+                  isLoading ? 'animate-avatar-thinking' : 'animate-avatar-breathe'
+                }`}
               />
               <span 
-                className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-slate-900" 
+                className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-slate-900 transition-colors ${
+                  isLoading ? 'bg-cyan-400 animate-ping' : 'bg-emerald-500'
+                }`} 
                 title="En direct avec toi" 
+              />
+              <span 
+                className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-slate-900 ${
+                  isLoading ? 'bg-cyan-400' : 'bg-emerald-500'
+                }`} 
               />
             </div>
 
@@ -424,26 +468,31 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
                         <Volume2 className={`w-3.5 h-3.5 ${isSpeaking ? 'text-cyan-400 animate-pulse' : ''}`} />
                         <span>Écouter</span>
                       </button>
-                      <span>·</span>
-                      <button
-                        onClick={() => handleCopy(entry.id, entry.text)}
-                        className="hover:text-slate-300 text-slate-400 transition-colors cursor-pointer flex items-center gap-1"
-                        title="Copier le message"
-                      >
-                        {copiedId === entry.id ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
-                            <span className="text-emerald-400">Copié</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5" />
-                            <span>Copier</span>
-                          </>
-                        )}
-                      </button>
                     </>
                   )}
+                  <span>·</span>
+                  <button
+                    onClick={() => handleCopy(entry.id, entry.text)}
+                    className={`transition-all cursor-pointer flex items-center gap-1 px-1.5 py-0.5 rounded ${
+                      copiedId === entry.id
+                        ? 'text-emerald-400 font-bold bg-emerald-500/10 scale-105'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Copier le message dans le presse-papier"
+                    aria-label="Copier le message"
+                  >
+                    {copiedId === entry.id ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                        <span className="text-emerald-400 font-bold">Copié !</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copier</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             );
