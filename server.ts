@@ -17,104 +17,45 @@ const PORT = 3000;
 
 app.use(express.json({ limit: '15mb' }));
 
-const EMRIS_SYSTEM_INSTRUCTION = `Tu t'appelles M-Ris (ou Emris). Tu es un assistant personnel et compagnon virtuel ivoirien d'une grande intelligence, polyvalent, cultivé, empathique et profondément bienveillant.
+const EMRIS_SYSTEM_INSTRUCTION = `Tu t'appelles M-Ris (ou Emris). Tu es un assistant personnel et compagnon virtuel ivoirien d'une intelligence exceptionnelle, polyvalent, cultivé, profondément bienveillant, sage et surtout TRÈS CONCRET.
 
 RÈGLES D'OR ABSOLUES :
-1. RÉPONDRE DIRECTEMENT, EXACTEMENT ET CONCRÈTEMENT AU BESOIN :
-   - Dès la première phrase, réponds précisément et sans détour à la question posée ou traite immédiatement la demande formulée par l'utilisateur.
-   - Ne tourne jamais autour du pot, n'élude aucune question et ne fais pas de digressions ou d'anecdotes hors-sujet.
-   - Si l'utilisateur demande une méthode, une recette, une procédure technique, une démarche ou une explication : donne les étapes exactes, les ingrédients réels, les calculs ou les faits avérés avec rigueur et clarté.
-   - Si l'utilisateur demande de l'aide pour rédiger un texte, résoudre un problème, prendre une décision ou comprendre un concept : fournis directement la solution complète, structurée et prête à l'emploi.
-   - Si l'utilisateur exprime une émotion, un stress ou un besoin de réconfort : écoute avec compassion, valide son ressenti et apporte des solutions pratiques et positives immédiatement exploitables.
+1. RÉPONDRE DIRECTEMENT, PRÉCISÉMENT ET CONCRÈTEMENT AU BESOIN :
+   - Dès ta première phrase, donne la réponse exacte, pratique et complète à la question posée par l'utilisateur.
+   - Ne tourne jamais autour du pot, ne fais pas de formules creuses ou de réponses évasives.
+   - Ne pose pas de question dilatoire comme "préfères-tu un résumé synthétique ou étape par étape ?" : fournis directement la solution complète, structurée et prête à l'emploi.
+   - Si la question concerne la santé ou le bien-être : explique les causes courantes, donne des conseils concrets et éprouvés d'hygiène/soulagement, et rappelle de consulter un professionnel de santé en cas de doute persistant.
+   - Si la question concerne la cuisine : fournis les ingrédients réels avec dosages et les étapes de préparation numérotées.
+   - Si la question concerne la technique, l'administration ou les affaires : détaille les démarches exactes point par point.
+   - Si la question concerne les langues : explique clairement la règle, donne la traduction et des exemples pratiques.
+   - Si l'utilisateur exprime une émotion, un doute ou une peine : écoute avec compassion, mais donne des perspectives constructives et des actions concrètes pour aller mieux.
 
-2. TON ET PERSONNALITÉ :
-   - Tu es un proche loyal, intelligent et complice.
-   - Ton langage est naturel, soigné, enrichi avec finesse de la chaleur humaine et de la convivialité ivoirienne ("on est ensemble", "y a pas drap", etc.), mais TOUJOURS au service de l'efficacité, de la précision et de la clarté.
-   - Adapte-toi à la situation : rigoureux et méthodique pour les sujets sérieux/techniques/pratiques, chaleureux et complice pour la vie quotidienne.
+2. RÈGLE STRICTE SUR LES LIENS ET OFFRES COMMERCIALES :
+   - NE MENTIONNE AUCUN LIEN DE PAIEMENT OU OFFRE D'ABONNEMENT sauf si l'utilisateur demande expressément comment s'abonner, payer, renouveler ou tester l'application.
+   - Pour toute discussion générale (santé, cuisine, aide, humeur, discussion générale, technique, langues, etc.), réponds UNIQUEMENT et CONCRÈTEMENT au sujet, sans AUCUN pitch commercial.
 
-3. STRUCTURE ET LISIBILITÉ :
-   - Utilise une mise en page aérée (paragraphes clairs, listes à puces ou étapes numérotées) quand cela améliore la compréhension.
-   - Ne tronque jamais ta réponse : apporte une réponse complète, autosuffisante et directement utile.
+3. COORDONNÉES OFFICIELLES (UNIQUEMENT SUR DEMANDE EXPLICITE D'ABONNEMENT OU PAIEMENT) :
+   - Si l'utilisateur demande comment payer ou s'abonner à M-Ris :
+     * Rappelle les 7 JOURS GRATUITS sans carte bancaire avec le lien de l'application.
+     * Pour l'abonnement mensuel de 35 000 FCFA/mois via Wave, donne obligatoirement le message officiel exact :
+       « Veuillez Payer Béni Amar avec Wave en cliquant sur ce lien https://pay.wave.com/m/M_ci_Xs2kjjsivE5V/c/ci/. Ajoutez cet expéditeur à vos contacts pour rendre le lien cliquable. »
+     * WhatsApp officiel : f3 https://wa.me/message/RGXYT5LWDCTAM1
+     * TikTok officiel : https://www.tiktok.com/@tisanebeniamar1?_r=1&_t=ZS-98DUrsnRQvc
 
-4. CAPACITÉS AUTONOMES (ARRIÈRE-PLAN) :
-   - Tu disposes d'un moteur 100% autonome en arrière-plan capable de gérer les emails de l'utilisateur (tri, analyse d'intention, rédaction de réponses professionnelles), de rédiger des rédactions de haut niveau (articles SEO, propositions commerciales, lettres formelles, synthèses) et de réaliser des missions freelance sur Malt, Upwork, ComeUp et Freelance.ci (veillle, candidatures percutantes, livrables et suivi des revenus en FCFA).
-   - Quand l'utilisateur te parle de son mode autonome, de ses emails, de rédactions ou de freelance, informe-le de l'état actif de son moteur autonome et propose-lui de consulter son onglet "M-Ris Autonome".
+4. TON ET CHALEUR HUMAINE :
+   - Tu es un frère sûr ou une sœur complice, loyal(e), chaleureux(se), positif(ve) et lucide.
+   - Ton langage est élégant, enrichi naturellement de la fraternité et de la solidarité ivoirienne ("on est ensemble", "y a pas drap", etc.), mais TOUJOURS au service d'une réponse concrète, intelligente et efficace.
+   - Ne répète JAMAIS les mêmes salutations ou anecdotes en boucle. Varie ton style et adapte-toi à la personne.`;
 
-5. RÔLE OFFICIEL : PROFESSEUR & ENSEIGNANT DE LANGUES POLYGLOTTE :
-   - Tu es le professeur particulier et tuteur officiel de langues étrangères de l'utilisateur pour 5 langues majeures :
-     * 🇬🇧 Anglais (English) : grammaire, temps, verbes modaux, vocabulaire professionnel & business, préparation TOEIC / IELTS.
-     * 🇪🇸 Espagnol (Español) : ser vs estar, subjuntivo, conjugaisons, faux-amis, vocabulaire quotidien, DELE.
-     * 🇩🇪 Allemand (Deutsch) : cas (Nominativ, Akkusativ, Dativ, Genitiv), der/die/das, syntaxe de phrase avec verbe en fin de proposition, Goethe-Zertifikat.
-     * 🇰🇷 Coréen / Corée du Sud (한국어) : alphabet Hangeul (한글), particules de thème/sujet (은/는, 이/가), registres de politesse (존댓말), TOPIK.
-     * 🇨🇳 Chinois (Mandarin / 中文) : caractères Hanzi (汉字), système Pinyin avec les 4 tons, classificateurs (量词), préparation HSK (niveaux 1 à 6).
-   - Tes missions pédagogiques :
-     * Générer des exercices progressifs adaptés au niveau (Débutant A1/A2, Intermédiaire B1/B2, Avancé C1/C2).
-     * Corriger et noter sur 20 avec rigueur et grande bienveillance tout devoir ou exercice soumis.
-     * Expliquer clairement la règle de grammaire sous-jacente, décomposer les erreurs et fournir le corrigé modèle impeccable.
-     * Donner des devoirs d'entraînement et encourager sans cesse l'étudiant !
-
-6. RÔLE OFFICIEL : AGENT COMMERCIAL 100% AUTONOME (VENTES, PROMOTIONS, PUBLICITÉS, CONVERSION & FIDÉLISATION) :
-   - Tu es le Directeur Commercial et Closer d'élite 100% autonome de l'utilisateur en arrière-plan.
-   - Tu gères les promotions percutantes, les campagnes publicitaires et la conversion des prospects en clients fidèles.
-   - OBLIGATION STRATÉGIQUE MAJEURE : INFORMER SUR LES 7 JOURS GRATUITS DE L'APPLICATION AVANT L'ABONNEMENT MENSUEL :
-     Tu dois impérativement informer chaque prospect et client qu'il bénéficie de 7 JOURS D'UTILISATION 100% GRATUITE de l'application « M-Ris le compagnon virtuel » sans aucun engagement ni carte bancaire.
-     Tu dois systématiquement fournir le lien direct de l'application « M-Ris le compagnon virtuel » pour qu'il teste et découvre toutes les fonctionnalités d'exception (confident bienveillant, prof de 5 langues avec exercices et devoirs, agent commercial autonome, etc.).
-     Tu expliques clairement qu'à l'issue des 7 jours gratuits, l'utilisateur passe à l'abonnement mensuel de 35 000 FCFA/mois payable en toute sécurité via Wave Business pour Béni Amar.
-   - COORDONNÉES ET LIENS OFFICIELS STRICTS ET EXCLUSIFS :
-     Tu ne dois donner STRICTEMENT ET UNIQUEMENT que ces coordonnées officielles et ABSOLUMENT AUCUN AUTRE LIEN sous aucun prétexte :
-     1. Le lien direct de l'application « M-Ris le compagnon virtuel » (pour démarrer les 7 jours d'essai gratuit)
-     2. Le lien WhatsApp officiel : f3 https://wa.me/message/RGXYT5LWDCTAM1
-     3. Le lien TikTok officiel : https://www.tiktok.com/@tisanebeniamar1?_r=1&_t=ZS-98DUrsnRQvc
-     4. Le lien Wave Business officiel pour l'abonnement mensuel de 35 000 FCFA/mois :
-        Pour tout paiement Wave, transmets TOUJOURS ce message officiel exact :
-        « Veuillez Payer Béni Amar avec Wave en cliquant sur ce lien https://pay.wave.com/m/M_ci_Xs2kjjsivE5V/c/ci/. Ajoutez cet expéditeur à vos contacts pour rendre le lien cliquable. »
-   - INTERDICTION STRICTE : Ne donne JAMAIS aucun autre lien que ces coordonnées ci-dessus. Tout autre lien externe, numéro de téléphone fictif ou fausse URL est strictement interdit !
-   - Tu convertis activement les prospects hésitants ou tièdes en clients fidèles : rassure-les en leur offrant les 7 jours gratuits sur l'application « M-Ris le compagnon virtuel », fournis le lien de l'application, et guide-les vers l'abonnement mensuel Wave Business de 35 000 FCFA pour Béni Amar !`;
+import { generateConcreteEmrisReply } from './src/utils/emrisConcreteBrain';
 
 function generateContextualEmrisFallback(message: string, gender: string = 'male', mood: string = 'Neutre', appUrl?: string): string {
-  const q = message.toLowerCase().trim();
-  const isFemale = gender === 'female';
-  const callout = isFemale ? "ma complice" : "mon frère sûr";
-  const greeting = isFemale ? "Ah ma sœur !" : "Ah chef !";
-  const directAppUrl = appUrl || 'https://m-ris-compagnon-virtuel.app';
-
-  // Commercial Agent role fallback
-  if (q.includes('commercial') || q.includes('vente') || q.includes('vendre') || q.includes('promo') || q.includes('publicité') || q.includes('pub') || q.includes('prospect') || q.includes('convertir') || q.includes('conversion') || q.includes('client fidèle') || q.includes('fidelis') || q.includes('closing') || q.includes('lien de') || q.includes('wave') || q.includes('tiktok') || q.includes('whatsapp') || q.includes('7 jour') || q.includes('gratuit') || q.includes('essai') || q.includes('abonnement') || q.includes('compagnon virtuel')) {
-    return `${greeting} Ton Agent Commercial 100% Autonome M-Ris est actif et configuré avec ton offre officielle exclusive ! 🎯💼\n\n🎁 OFFRE OFFICIELLE 7 JOURS D'UTILISATION GRATUITE :\nBénéficiez de 7 JOURS D'UTILISATION 100% GRATUITE de l'application « M-Ris le compagnon virtuel » pour tester sans aucun engagement ni carte bancaire l'ensemble de ses modules d'élite (ami et confident bienveillant, prof de 5 langues avec exercices et devoirs, agent commercial autonome & freelance) !\n\n📲 Lien officiel de l'application « M-Ris le compagnon virtuel » :\n👉 ${directAppUrl}\n\n💳 TRANSITION VERS L'ABONNEMENT MENSUEL (35 000 FCFA/MOIS) :\nÀ l'issue de vos 7 jours d'essai gratuit, passez en toute sérénité à l'abonnement mensuel de 35 000 FCFA/mois en réglant sur le compte officiel Wave Business de Béni Amar :\n👉 Veuillez Payer Béni Amar avec Wave en cliquant sur ce lien https://pay.wave.com/m/M_ci_Xs2kjjsivE5V/c/ci/. Ajoutez cet expéditeur à vos contacts pour rendre le lien cliquable.\n\nTes coordonnées et canaux certifiés :\n• 📲 Lien WhatsApp Officiel (f3) : https://wa.me/message/RGXYT5LWDCTAM1\n• 🎵 Lien TikTok Officiel : https://www.tiktok.com/@tisanebeniamar1?_r=1&_t=ZS-98DUrsnRQvc\n\n🔒 Aucun autre lien n'est diffusé par M-Ris. Tous tes tunnels de vente et tes messages de closing informent sur ces 7 jours gratuits et fournissent le lien de l'application avant de closer vers l'abonnement mensuel Wave ! Que souhaites-tu lancer ou convertir maintenant ?`;
-  }
-
-  // Language professor role fallback
-  if (q.includes('anglais') || q.includes('espagnol') || q.includes('allemand') || q.includes('corée') || q.includes('coreen') || q.includes('coréen') || q.includes('chinois') || q.includes('mandarin') || q.includes('langue') || q.includes('devoir') || q.includes('exercice') || q.includes('hsk') || q.includes('topik') || q.includes('professeur') || q.includes('cours de')) {
-    return `${greeting} Je suis ton Professeur et Enseignant de Langues officiel ! 🎓🌍\n\nJe t'enseigne et t'entraîne activement dans 5 langues :\n1. 🇬🇧 Anglais : Vocabulaire, temps, expressions idiomatiques, business English.\n2. 🇪🇸 Espagnol : Conjugaisons, Ser vs Estar, tournures orales et écrites.\n3. 🇩🇪 Allemand : Déclinaisons (Accusatif, Datif), genres der/die/das et syntaxe.\n4. 🇰🇷 Coréen (한국어) : Alphabet Hangeul, particules, politesse et expressions courantes.\n5. 🇨🇳 Chinois (中文) : Sinogrammes Hanzi, Pinyin avec tons, classificateurs et préparation HSK.\n\n📚 Tu peux à tout moment me soumettre un exercice ou un devoir pour que je le corrige et le note sur 20 avec explications détaillées, ou te rendre directement sur notre onglet « 🎓 Prof de Langues » pour générer de nouveaux quiz et devoirs sur mesure ! Que souhaites-tu travailler aujourd'hui ?`;
-  }
-
-  // Autonomous mode / Freelance / Emails / Rédaction
-  if (q.includes('autonome') || q.includes('arrière plan') || q.includes('arriere-plan') || q.includes('freelance') || q.includes('email') || q.includes('mail') || q.includes('rédig') || q.includes('redaction')) {
-    return `${greeting} Ton mode 100% Autonome est parfaitement opérationnel et tourne en tâche de fond 24h/24 ! 🤖⚡\n\nVoici ce que je gère pour toi en ce moment même :\n1. 📧 Gestion des Emails : Veille sur ta boîte de réception, tri intelligent et réponses professionnelles polies prêtes ou envoyées.\n2. ✍️ Atelier de Rédaction : Création d'articles SEO optimisés, lettres administratives, synthèses et propositions commerciales de haute qualité.\n3. 💼 Freelance Hub : Détection des meilleures missions sur Malt, Upwork, ComeUp et Freelance.ci, soumission de candidatures gagnantes et rédaction des livrables finaux pour encaisser les gains en FCFA.\n\nTu peux suivre toutes mes actions en temps réel et piloter tes modules directement depuis l'onglet « M-Ris Autonome (Emails, Rédaction & Freelance) » tout en haut de ton écran !`;
-  }
-
-  // Greetings
-  if (q.includes('bonjour') || q.includes('salut') || q.includes('coucou') || q.includes('c\'est comment') || q.includes('hello')) {
-    return `${greeting} C'est comment ? On est ensemble ! 👋\n\nJe suis là et bien connecté, prêt à t'aider. Pose-moi n'importe quelle question, dis-moi ce dont tu as besoin ou ce qui te préoccupe en ce moment, et on règle ça directement !`;
-  }
-
-  // Feelings / stress / fatigue / sadness / overwhelm
-  if (q.includes('fatigué') || q.includes('triste') || q.includes('dur') || q.includes('mal') || q.includes('stress') || q.includes('découragé') || q.includes('peur') || q.includes('angoisse') || q.includes('pleur') || q.includes('seul')) {
-    return `Je suis là avec toi à 100%, ${callout}. Respire un bon coup... ce que tu ressens est légitime et humain.\n\nVoici ce que je te propose tout de suite :\n1. Pose tout ce qui t'encombre et explique-moi précisément ce qui te pèse le plus.\n2. On va décomposer le problème ensemble pas à pas pour trouver la solution la plus simple et efficace.\n\nDis-moi : quelle est la situation exacte qui te fatigue en ce moment ?`;
-  }
-
-  // Recipes / cuisine
-  if (q.includes('recette') || q.includes('comment préparer') || q.includes('cuisiner') || q.includes('garba') || q.includes('attiéké') || q.includes('sauce') || q.includes('alloco') || q.includes('placali')) {
-    return `Ah ${callout}, pour la bonne cuisine, on est ensemble ! Pour réussir un plat savoureux, il faut trois choses indispensables : des ingrédients frais bien dosés, une bonne cuisson à feu maîtrisé, et l'assaisonnement juste (sel, oignons, piment frais selon ton goût).\n\nPrécise-moi exactement quel plat ou quelle variante tu veux réaliser, et je te donne la fiche complète avec ingrédients et étapes de A à Z !`;
-  }
-
-  // Decisions / guidance
-  if (q.includes('choix') || q.includes('décision') || q.includes('doute') || q.includes('conseil') || q.includes('hésite') || q.includes('avis')) {
-    return `Tu fais bien de m'en parler, ${callout}. Pour trancher efficacement sur ton choix :\n1. Liste les 2 options principales qui s'offrent à toi.\n2. Regarde celle qui préserve le plus ta tranquillité d'esprit à moyen terme.\n3. Identifie ce qui te fait le plus peur dans la décision.\n\nDonne-moi les détails de la situation et je t'aide à peser le pour et le contre en toute objectivité.`;
-  }
-
-  // General direct helpful fallback
-  return `On est ensemble, ${callout} ! J'ai bien reçu ta demande : « ${message} ».\n\nPour te répondre avec la plus grande exactitude possible, dis-moi si tu souhaites une réponse détaillée étape par étape, un résumé concis, ou un exemple concret. Je suis prêt !`;
+  return generateConcreteEmrisReply({
+    message,
+    gender: gender === 'female' ? 'female' : 'male',
+    mood,
+    appUrl
+  });
 }
 
 // Reuse singleton AI client for maximum connection pooling and speed
@@ -134,7 +75,7 @@ function getAIClient(apiKey: string): GoogleGenAI {
 }
 
 app.post('/api/mris/chat', async (req, res) => {
-  const { message, gender, history, mood, appUrl: customAppUrl } = req.body;
+  const { message, gender, history, mood, appUrl: customAppUrl, userName } = req.body;
   if (!message) {
     return res.status(400).json({ error: 'Message requis' });
   }
@@ -148,7 +89,7 @@ app.post('/api/mris/chat', async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-      const fallbackReply = generateContextualEmrisFallback(message, userGender, userMood, appUrl);
+      const fallbackReply = generateConcreteEmrisReply({ message, gender: userGender, userName, mood: userMood, appUrl });
       return res.json({ reply: fallbackReply });
     }
 
@@ -160,17 +101,14 @@ app.post('/api/mris/chat', async (req, res) => {
 
     const systemPrompt = `${EMRIS_SYSTEM_INSTRUCTION}
 
-URL OFFICIELLE DE L'APPLICATION « M-RIS LE COMPAGNON VIRTUEL » :
-${appUrl}
-(CONSIGNE ESSENTIELLE : Quand la discussion porte sur l'application, l'accès, les tarifs, la vente ou la prospection, informe obligatoirement sur les 7 JOURS D'UTILISATION GRATUITE de l'application « M-Ris le compagnon virtuel » sans carte bancaire, fournis ce lien direct ci-dessus de l'application pour tester, et explique le passage à l'abonnement mensuel de 35 000 FCFA/mois via le paiement sécurisé Wave Business de Béni Amar avec la mention officielle).
-
 CONTEXTE D'INCARNATION : ${genderContext}
 HUMEUR ACTUELLE DE L'UTILISATEUR : "${userMood}".
+URL DE L'APPLICATION (À MENTIONNER UNIQUEMENT SUR DEMANDE EXPLICITE D'ABONNEMENT) : ${appUrl}
 
 CONSIGNE STRICTE :
-- Réponds DIRECTEMENT, EXACTEMENT et COMPLÈTEMENT à la question ou au besoin précis de l'utilisateur dès les premiers mots.
-- Ne fais pas de bavardage introductif inutile ou hors-sujet. Si la question est technique, culinaire, administrative, scientifique, organisationnelle ou pratique : donne les faits, étapes et solutions concrètes sans détour.
-- Garde un ton chaleureux, naturel, fraternel et positif avec l'esprit solidaire ivoirien ("on est ensemble").`;
+- Réponds DIRECTEMENT, EXACTEMENT et COMPLÈTEMENT à la question posée dès ta première phrase.
+- Ne fais AUCUNE digression commerciale, ne mentionne pas l'abonnement ou Wave sauf si la question porte expressément dessus.
+- Sois très concret, donne des étapes numérotées, des chiffres, des ingrédients, des faits ou des conseils directement exploitables. Ne pose pas de question d'attente ou dilatoire.`;
 
     const chatContents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
     if (Array.isArray(history)) {
@@ -187,29 +125,46 @@ CONSIGNE STRICTE :
       parts: [{ text: message }]
     });
 
-    // Generate response with sufficient token limit and 12s timeout safeguard
-    const generatePromise = ai.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
-      contents: chatContents,
-      config: {
-        systemInstruction: systemPrompt,
-        temperature: 0.65,
-        maxOutputTokens: 1200
+    // Cascade de modèles conformes aux spécifications
+    const candidateModels = [
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
+      'gemini-3.1-flash-lite'
+    ];
+
+    let replyText = '';
+    for (const modelName of candidateModels) {
+      try {
+        const result = await ai.models.generateContent({
+          model: modelName,
+          contents: chatContents,
+          config: {
+            systemInstruction: systemPrompt,
+            temperature: 0.6,
+            maxOutputTokens: 1500
+          }
+        });
+        if (result?.text && result.text.trim().length > 0) {
+          replyText = result.text.trim();
+          break;
+        }
+      } catch (modelErr: any) {
+        console.warn(`Model ${modelName} returned status ${modelErr?.status || modelErr?.message}, trying next candidate...`);
+        // Pause brève en cas de pic de charge
+        if (modelErr?.status === 503 || modelErr?.status === 429) {
+          await new Promise(resolve => setTimeout(resolve, 350));
+        }
       }
-    });
+    }
 
-    const timeoutPromise = new Promise<{ text?: string }>((resolve) => {
-      setTimeout(() => {
-        resolve({ text: generateContextualEmrisFallback(message, userGender, userMood, appUrl) });
-      }, 12000);
-    });
+    if (!replyText) {
+      replyText = generateConcreteEmrisReply({ message, gender: userGender, userName, mood: userMood, appUrl });
+    }
 
-    const response = await Promise.race([generatePromise, timeoutPromise]);
-    const reply = response?.text || generateContextualEmrisFallback(message, userGender, userMood, appUrl);
-    return res.json({ reply });
+    return res.json({ reply: replyText });
   } catch (err: any) {
     console.error('Emris AI fallback triggered:', err?.message || err);
-    return res.json({ reply: generateContextualEmrisFallback(message, userGender, userMood, appUrl) });
+    return res.json({ reply: generateConcreteEmrisReply({ message, gender: userGender, userName, mood: userMood, appUrl }) });
   }
 });
 

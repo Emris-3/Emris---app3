@@ -37,6 +37,25 @@
       "totalPaidFCFA": 0,
       "isOnline": true,
       "notes": "Compte administratrice Esther"
+    },
+    {
+      "id": "usr-1792139492788",
+      "userName": "Béni Amar",
+      "userEmail": "beniamarbusiness@gmail.com",
+      "userPhone": "0594089104",
+      "password": "",
+      "role": "client",
+      "accountStatus": "pending",
+      "registeredAt": "2026-10-16T08:31:32.788+00:00",
+      "lastLoginAt": "2026-10-16T08:31:32.788+00:00",
+      "loginCount": 1,
+      "device": "Mobile (Téléphone)",
+      "subscriptionPlan": "Essai Gratuit 7 Jours",
+      "subscriptionStatus": "trial",
+      "paymentStatus": "none",
+      "totalPaidFCFA": 0,
+      "isOnline": true,
+      "notes": "Compte persistant Supabase"
     }
   ],
   "subscriptions": [],
@@ -54,5 +73,5 @@
     }
   ],
   "whatsAppAlerts": [],
-  "lastUpdated": "2026-10-15T21:05:31.989Z"
+  "lastUpdated": "2026-10-16T09:13:00.122Z"
 }

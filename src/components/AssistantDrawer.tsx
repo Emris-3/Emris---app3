@@ -330,75 +330,90 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
       return;
     }
 
-    // Toggle: if currently speaking this same message, cancel/pause it
     if (speakingMessageId === msgId && window.speechSynthesis.speaking) {
-      window.speechSynthesis.cancel();
+      try { window.speechSynthesis.cancel(); } catch {}
       setSpeakingMessageId(null);
       return;
     }
 
-    // Cancel any previous speech playback
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch {}
 
-    // Clean up markdown formatting, links and emojis for natural French speech
-    const cleanText = text
-      .replace(/https?:\/\/[^\s]+/g, 'le lien officiel')
-      .replace(/[*_#`~[\]()]/g, '')
-      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+    let cleanText = text
+      .replace(/https?:\/\/[^\s]+/g, 'le lien')
+      .replace(/[*_#`~[\]()]/g, ' ')
+      .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '')
+      .replace(/\s+/g, ' ')
       .trim();
 
     if (!cleanText) return;
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = 'fr-FR';
-    utterance.rate = 1.0;
-    utterance.pitch = avatarGender === 'female' ? 1.15 : 0.95;
+    setTimeout(() => {
+      try {
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        (window as any)._activeUtteranceDrawer = utterance;
+        utterance.lang = 'fr-FR';
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
 
-    // Pick a natural French voice if installed
-    try {
-      const voices = window.speechSynthesis.getVoices();
-      const frVoice = voices.find(v => v.lang.startsWith('fr') && (avatarGender === 'female' ? /female|femme|julie|hortense|celine/i.test(v.name) : true))
-        || voices.find(v => v.lang.startsWith('fr'));
-      if (frVoice) {
-        utterance.voice = frVoice;
+        try {
+          const voices = window.speechSynthesis.getVoices();
+          if (voices && voices.length > 0) {
+            const frVoice = voices.find(v => v.lang && (v.lang === 'fr-FR' || v.lang.toLowerCase().startsWith('fr')));
+            if (frVoice) {
+              utterance.voice = frVoice;
+            }
+          }
+        } catch {}
+
+        utterance.onstart = () => {
+          setSpeakingMessageId(msgId || 'active');
+        };
+
+        utterance.onend = () => {
+          setSpeakingMessageId(null);
+        };
+
+        utterance.onerror = (e) => {
+          setSpeakingMessageId(null);
+          if (e.error !== 'interrupted' && e.error !== 'canceled') {
+            console.warn('Speech synthesis error in drawer:', e.error);
+          }
+        };
+
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.error('Failed to speak text in drawer:', err);
+        setSpeakingMessageId(null);
       }
-    } catch {
-      // Ignore voice selection error
-    }
-
-    utterance.onstart = () => {
-      setSpeakingMessageId(msgId || 'active');
-    };
-
-    utterance.onend = () => {
-      setSpeakingMessageId(null);
-    };
-
-    utterance.onerror = () => {
-      setSpeakingMessageId(null);
-    };
-
-    window.speechSynthesis.speak(utterance);
+    }, 60);
   };
 
   // Arrêt strict de la dictée vocale
   const stopVoiceDictation = () => {
     isListeningRef.current = false;
     if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {}
+      try { recognitionRef.current.stop(); } catch {}
+      try { recognitionRef.current.abort(); } catch {}
     }
     setIsListening(false);
   };
 
-  // Speech Recognition (STT) using Web SpeechRecognition API
+  // Speech Recognition (STT) direct et synchrone
   const startVoiceDictation = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setCopyToast("La reconnaissance vocale n'est pas supportée par ce navigateur. Utilisez Google Chrome, Edge ou Safari.");
-      setTimeout(() => setCopyToast(null), 3500);
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      setCopyToast(isMobile
+        ? "Ce navigateur ne supporte pas le micro. Ouvrez le site dans Chrome ou Safari !"
+        : "La reconnaissance vocale nécessite Google Chrome, Safari ou Microsoft Edge.");
+      setTimeout(() => setCopyToast(null), 5000);
       return;
     }
 
@@ -418,16 +433,17 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
       recognition.onstart = () => {
         isListeningRef.current = true;
         setIsListening(true);
+        setCopyToast("🎙️ Micro actif ! Parlez clairement...");
+        setTimeout(() => setCopyToast(null), 2500);
       };
 
       recognition.onresult = (event: any) => {
-        // Empêcher l'écrasement des mots saisis au clavier
         if (!isListeningRef.current) return;
         let transcript = '';
         for (let i = 0; i < event.results.length; i++) {
           transcript += event.results[i][0].transcript;
         }
-        if (transcript && isListeningRef.current) {
+        if (transcript) {
           setInputText(transcript);
         }
       };
@@ -435,23 +451,27 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
       recognition.onerror = (event: any) => {
         console.warn('Speech recognition error:', event.error);
         stopVoiceDictation();
-        if (event.error === 'not-allowed') {
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
           setCopyToast("Accès au microphone refusé. Autorisez le micro dans les paramètres du navigateur.");
-          setTimeout(() => setCopyToast(null), 3500);
-        } else if (event.error !== 'no-speech') {
+        } else if (event.error === 'no-speech') {
+          setCopyToast("Aucune parole détectée. Rapprochez-vous du micro et réessayez.");
+        } else if (event.error !== 'aborted') {
           setCopyToast("Dictée interrompue (" + event.error + ")");
-          setTimeout(() => setCopyToast(null), 2500);
         }
+        setTimeout(() => setCopyToast(null), 3500);
       };
 
       recognition.onend = () => {
-        stopVoiceDictation();
+        isListeningRef.current = false;
+        setIsListening(false);
       };
 
       recognition.start();
     } catch (err) {
-      console.error('Failed to start speech recognition:', err);
+      console.error('Recognition start failed:', err);
       stopVoiceDictation();
+      setCopyToast("Impossible de démarrer le micro.");
+      setTimeout(() => setCopyToast(null), 3000);
     }
   };
 
@@ -1219,12 +1239,12 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
                 <input
                   type="text"
                   value={inputText}
-                  onFocus={stopVoiceDictation}
-                  onKeyDown={() => {
-                    if (isListeningRef.current) stopVoiceDictation();
+                  onKeyDown={(e) => {
+                    if (isListeningRef.current && e.key !== 'Shift' && e.key !== 'Control' && e.key !== 'Alt') {
+                      stopVoiceDictation();
+                    }
                   }}
                   onChange={(e) => {
-                    if (isListeningRef.current) stopVoiceDictation();
                     setInputText(e.target.value);
                   }}
                   autoComplete="off"

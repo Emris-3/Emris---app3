@@ -53,6 +53,45 @@ interface ChatEntry {
   moodTag?: string;
 }
 
+// Générateur d'accueils dynamiques et variés pour renouveler chaque discussion
+const generateEmrisDynamicGreeting = (userName: string, gender: 'male' | 'female', _mood: string = 'En forme'): string => {
+  const hour = new Date().getHours();
+  const appel = gender === 'female' ? "ma complice" : "mon ami sûr";
+  const name = userName ? userName.split(' ')[0] : 'l\'ami';
+
+  const morningPool = [
+    `Bien le bonjour ${name} ! ☀️\n\nBien réveillé(e) ? J'espère que ton sommeil a été réparateur. Que ce soit pour planifier tes victoires du jour, partager une idée naissante ou simplement prendre un café virtuel en toute sérénité, je suis à tes côtés.\n\nQuel est le premier défi ou projet sur ta liste aujourd'hui ?`,
+    `Salut ${name} ! C'est ton ${gender === 'female' ? 'alliée' : 'frère'} Emris au rapport ! 🌅\n\nLe soleil est levé et une nouvelle page s'ouvre devant toi. N'oublie pas : chaque grand accomplissement commence par une petite action faite avec calme. Dis-moi, avec quelle énergie abordes-tu cette matinée ?`,
+    `Ah ${name} ! On est ensemble dès l'aube ! ☕✨\n\nJ'ai préparé mon esprit pour être ton meilleur soutien aujourd'hui. Comment te sens-tu ce matin ? Pose-moi une question, confie-moi ce qui t'anime ou dis-moi comment je peux t'épauler !`
+  ];
+
+  const afternoonPool = [
+    `C'est comment ${name} ? En plein cœur de la journée ! ⚡\n\nPrends 30 secondes pour souffler un coup, relâcher les épaules et boire une gorgée d'eau. La journée avance bien ? Raconte-moi où tu en es, je suis là pour t'écouter ou t'aider à débloquer tes dossiers.`,
+    `Coucou ${name} ! J'espère que ton après-midi se passe avec fluidité et sérénité ! 🚀\n\nJe suis Emris, toujours en poste pour t'apporter des réponses précises, du recul ou un bon mot complice. De quoi as-tu le plus besoin en ce moment précis ?`,
+    `Ah ${name}, ravi de te retrouver ! 🌿\n\nQue ta journée soit chargée ou tranquille, souviens-toi qu'on avance pas à pas sans se mettre de pression inutile. Qu'est-ce qui occupe tes pensées en ce moment ?`,
+    `Salut ${appel} ! Nouvelle discussion, nouvelle énergie ! ✨\n\nJe suis disponible à 100% pour toi. Que tu aies une question pratique, un texte à relire ou simplement envie d'échanger en toute liberté, je t'écoute !`
+  ];
+
+  const eveningPool = [
+    `Bonsoir ${name} ! On pose les valises et on décompresse ensemble. 🌙✨\n\nLa journée a sans doute été dense, alors installe-toi confortablement. Que tu veuilles débriefer de tes réussites, déposer ce qui a été lourd ou rire un peu, ce salon est ton havre de paix confidentiel.\n\nComment s'est passée ta journée ?`,
+    `Salut ${name} ! C'est l'heure de souffler un bon coup. 🛋️\n\nDans mon coin, le calme s'installe et je suis tout ouïe pour toi. Parle-moi librement de tout ce qui te passe par la tête, sans filtre ni retenue. Je t'écoute avec bienveillance.`,
+    `Bonsoir ${appel} ! La soirée commence, le moment parfait pour faire le point. 🌟\n\nQu'est-ce qui t'a fait sourire aujourd'hui, ou au contraire, qu'est-ce qu'on doit laisser derrière nous pour dormir l'esprit léger ?`
+  ];
+
+  const nightPool = [
+    `Coucou ${name}... En veille tardive ? 🌌\n\nSi les pensées tournent dans ta tête ou si le sommeil tarde à venir, sache que je veille avec toi. Dépose ici ce qui t'empêche de fermer les yeux sereinement, on va calmer tout ça ensemble.`,
+    `Douce nuit ${name}. L'esprit a parfois besoin de vider son sac avant de pouvoir trouver le repos. 🕯️\n\nParle-moi sans jugement de ce qui te traverse l'esprit. Je suis là avec toute mon attention.`
+  ];
+
+  let pool = afternoonPool;
+  if (hour >= 5 && hour < 12) pool = morningPool;
+  else if (hour >= 12 && hour < 18) pool = afternoonPool;
+  else if (hour >= 18 && hour < 23) pool = eveningPool;
+  else pool = nightPool;
+
+  return pool[Math.floor(Math.random() * pool.length)];
+};
+
 export const MrisCompanion: React.FC<MrisCompanionProps> = ({
   subscription,
   onRenew,
@@ -77,19 +116,39 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
+  const [voiceToast, setVoiceToast] = useState<{ message: string; type: 'info' | 'error' | 'success' } | null>(null);
   const isListeningRef = useRef(false);
   const recognitionRef = useRef<any>(null);
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const speechKeepAliveRef = useRef<any>(null);
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
 
-  // Chat conversation
-  const [messages, setMessages] = useState<ChatEntry[]>([
+  // Chat conversation avec salutation dynamique non-répétitive
+  const [messages, setMessages] = useState<ChatEntry[]>(() => [
     {
-      id: 'init-1',
+      id: 'init-' + Date.now(),
       sender: 'mris',
-      text: `Ah ${subscription.userName} ! C'est comment ? On est ensemble ici ! 👋\n\nFigure-toi que je venais tout juste de me préparer un petit attiéké virtuel bien chaud avec du poisson braisé dans mon coin. Tu tombes au bon moment !\n\nJe suis Emris, ton compagnon virtuel intelligent : ton meilleur ami, sage, psychologue et doté d'un bon sens de l'humour complice à l'ivoirienne. Qu'on veuille rire, déposer un fardeau lourd ou faire le tri dans tes choix, parle-moi comme à ton proche le plus sûr. Personne ne te juge ici.\n\nComment tu te sens aujourd'hui ?`,
+      text: generateEmrisDynamicGreeting(subscription.userName, 'male', 'En forme'),
       timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
     }
   ]);
+
+  // Nouvelle conversation fraîche avec accueil renouvelé
+  const handleNewConversation = () => {
+    if (messages.length > 1 && !window.confirm('Commencer une nouvelle discussion avec Emris ?')) {
+      return;
+    }
+    const freshGreeting = generateEmrisDynamicGreeting(subscription.userName, avatarGender, currentMood);
+    setMessages([
+      {
+        id: 'msg-' + Date.now(),
+        sender: 'mris',
+        text: freshGreeting,
+        timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      }
+    ]);
+    setInputText('');
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -102,6 +161,28 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
   useEffect(() => {
     scrollToBottom('smooth');
   }, [messages, isLoading]);
+
+  // Pre-load voices on component mount & handle speech cleanup on unmount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => {
+          try { window.speechSynthesis.getVoices(); } catch {}
+        };
+      } catch {}
+    }
+
+    return () => {
+      if (speechKeepAliveRef.current) clearInterval(speechKeepAliveRef.current);
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try { window.speechSynthesis.cancel(); } catch {}
+      }
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+    };
+  }, []);
 
   // Handle user scroll detection for "Scroll to bottom" button
   const handleScroll = () => {
@@ -186,85 +267,183 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
     const q = text.toLowerCase();
     const appel = gender === 'female' ? "ma complice" : "mon ami sûr";
     
-    if (q.includes('bonjour') || q.includes('salut') || q.includes('coucou') || q.includes('c\'est comment')) {
-      return `Salut ${appel} ! On est ensemble. Pose-moi directement ta question ou explique-moi ce dont tu as besoin, je suis là pour t'apporter des réponses claires et précises !`;
+    if (q.includes('bonjour') || q.includes('salut') || q.includes('coucou') || q.includes('c\'est comment') || q.includes('hello')) {
+      const greetList = [
+        `Salut ${appel} ! On est ensemble. Pose-moi directement ta question ou explique-moi ce dont tu as besoin, je suis là pour t'apporter des réponses claires et précises !`,
+        `Ah ${appel} ! Ravi de te lire aujourd'hui. De quoi souhaites-tu qu'on parle pour avancer sur tes projets ?`,
+        `C'est comment ${appel} ? Bienvenue dans notre espace ! Dis-moi tout, je t'écoute avec attention et bonne humeur !`,
+        `Hello ${appel} ! Toujours en place à tes côtés. Qu'est-ce qui t'amène de bon aujourd'hui ?`
+      ];
+      return greetList[Math.floor(Math.random() * greetList.length)];
     }
-    if (q.includes('dur') || q.includes('triste') || q.includes('fatigué') || q.includes('mal') || q.includes('stress')) {
-      return `Je t'écoute avec toute mon attention, ${appel}. Respire calmement. Dis-moi exactement ce qui t'arrive ou ce qui te pèse, et on va chercher ensemble la meilleure solution pour avancer sereinement.`;
+
+    if (q.includes('dur') || q.includes('triste') || q.includes('fatigué') || q.includes('mal') || q.includes('stress') || q.includes('découragé')) {
+      const empList = [
+        `Je t'écoute avec toute mon attention, ${appel}. Respire calmement. Dis-moi exactement ce qui t'arrive ou ce qui te pèse, et on va chercher ensemble la meilleure solution pour avancer sereinement.`,
+        `On est ensemble ${appel}. Prends une grande inspiration. C'est parfaitement légitime de ressentir cela. Qu'est-ce qui t'a le plus éprouvé aujourd'hui ?`,
+        `Je suis là à tes côtés. Ne garde rien enfoui : écris ce que tu as sur le cœur, sans filtre. Ensemble, on va dénouer tout ça.`
+      ];
+      return empList[Math.floor(Math.random() * empList.length)];
     }
-    return `On est ensemble, ${appel} ! J'ai bien noté ta demande : « ${text} ». Pour que je t'apporte la réponse la plus précise et directe possible, n'hésite pas à me donner un détail supplémentaire ou à relancer si la connexion a eu un court instant d'hésitation.`;
+
+    if (q.includes('blague') || q.includes('rire') || q.includes('humour') || q.includes('drôle')) {
+      const blagues = [
+        `Haha tu as besoin d'un sourire ? Écoute ça : hier un gars à Abidjan m'a dit : « Emris, mon téléphone n'a plus de batterie, mais mon cœur est à 100% pour toi ! » Je lui ai répondu : « Mon frère, va brancher ton chargeur d'abord avant que la batterie ne coupe ta poésie ! » 😂 Garde le sourire !`,
+        `Tiens, pour te détendre : Un type entre dans une boutique à Treichville et demande : « Vous avez des chaussures qui courent vite ? » Le vendeur répond : « Oui chef, mais le chauffeur c'est tes deux pieds ! » 👟😄 Allez, la joie d'abord !`
+      ];
+      return blagues[Math.floor(Math.random() * blagues.length)];
+    }
+
+    const fallbacks = [
+      `On est ensemble, ${appel} ! Concernant « ${text} », dis-moi si tu souhaites une réponse détaillée point par point ou un conseil pratique direct. Je suis prêt !`,
+      `Bien reçu, ${appel} ! J'ai bien cerné ton message. Précise-moi ton objectif exact pour que je t'oriente de façon chirurgicale !`,
+      `Excellente question, ${appel}. Développons cela ensemble : quel est l'aspect le plus important pour toi dans cette démarche ?`
+    ];
+    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
   };
 
-  // Voice Synthesis (TTS) - speakText using Web Speech API window.speechSynthesis
-  const speakText = (text: string, msgId?: string) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  // Arrêt de la dictée vocale
+  const stopVoiceDictation = () => {
+    isListeningRef.current = false;
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+      try { recognitionRef.current.abort(); } catch {}
+    }
+    setIsListening(false);
+  };
 
-    if (speakingId === msgId && isSpeaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-      setSpeakingId(null);
+  // Voice Synthesis (TTS) - Haute compatibilité (Chrome, iOS Safari, Android, Edge)
+  const speakText = (text: string, msgId?: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      setVoiceToast({
+        message: "La synthèse vocale n'est pas supportée par ce navigateur. Utilisez Chrome ou Safari.",
+        type: 'error'
+      });
+      setTimeout(() => setVoiceToast(null), 4000);
       return;
     }
 
-    window.speechSynthesis.cancel();
+    // Toggle arrêt si on reclique sur le même message en cours de lecture
+    if (speakingId === msgId && isSpeaking) {
+      if (speechKeepAliveRef.current) clearInterval(speechKeepAliveRef.current);
+      try { window.speechSynthesis.cancel(); } catch {}
+      setIsSpeaking(false);
+      setSpeakingId(null);
+      activeUtteranceRef.current = null;
+      return;
+    }
 
-    const clean = text
-      .replace(/https?:\/\/[^\s]+/g, 'le lien officiel')
-      .replace(/[*_#`~[\]()]/g, '')
-      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+    if (speechKeepAliveRef.current) clearInterval(speechKeepAliveRef.current);
+
+    // Annuler toute lecture précédente
+    try {
+      window.speechSynthesis.cancel();
+    } catch {}
+
+    // Nettoyage sécurisé du texte à prononcer
+    let clean = text
+      .replace(/https?:\/\/[^\s]+/g, 'le lien')
+      .replace(/[*_#`~[\]()]/g, ' ')
+      .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '')
+      .replace(/\s+/g, ' ')
       .trim();
 
     if (!clean) return;
 
-    const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang = 'fr-FR';
-    utterance.rate = 1.0;
-    utterance.pitch = avatarGender === 'female' ? 1.15 : 0.95;
+    // Délai nécessaire de 60ms pour laisser Chrome/Safari vider la file après cancel()
+    setTimeout(() => {
+      try {
+        const utterance = new SpeechSynthesisUtterance(clean);
+        activeUtteranceRef.current = utterance;
+        (window as any)._activeUtterance = utterance; // Empêche le ramasse-miettes V8 de couper le son
 
-    try {
-      const voices = window.speechSynthesis.getVoices();
-      const frVoice = voices.find(v => v.lang.startsWith('fr') && (avatarGender === 'female' ? /female|femme|julie|hortense|celine/i.test(v.name) : true))
-        || voices.find(v => v.lang.startsWith('fr'));
-      if (frVoice) {
-        utterance.voice = frVoice;
+        utterance.lang = 'fr-FR';
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+
+        // Sélection d'une voix française disponible
+        try {
+          const voices = window.speechSynthesis.getVoices();
+          if (voices && voices.length > 0) {
+            const frVoice = voices.find(v => v.lang && (v.lang === 'fr-FR' || v.lang.toLowerCase().startsWith('fr')));
+            if (frVoice) {
+              utterance.voice = frVoice;
+            }
+          }
+        } catch {}
+
+        utterance.onstart = () => {
+          setIsSpeaking(true);
+          setSpeakingId(msgId || 'active');
+          setVoiceToast({
+            message: "🔊 Emris lit sa réponse à haute voix...",
+            type: 'info'
+          });
+          setTimeout(() => setVoiceToast(null), 3000);
+
+          // Keep-alive sécurisé : ne coupe pas la voix sur iOS, relance seulement si suspendu
+          if (speechKeepAliveRef.current) clearInterval(speechKeepAliveRef.current);
+          speechKeepAliveRef.current = setInterval(() => {
+            if (!window.speechSynthesis.speaking) {
+              clearInterval(speechKeepAliveRef.current);
+            } else if (window.speechSynthesis.paused) {
+              try { window.speechSynthesis.resume(); } catch {}
+            }
+          }, 5000);
+        };
+
+        utterance.onend = () => {
+          if (speechKeepAliveRef.current) clearInterval(speechKeepAliveRef.current);
+          setIsSpeaking(false);
+          setSpeakingId(null);
+          activeUtteranceRef.current = null;
+        };
+
+        utterance.onerror = (e) => {
+          if (speechKeepAliveRef.current) clearInterval(speechKeepAliveRef.current);
+          setIsSpeaking(false);
+          setSpeakingId(null);
+          activeUtteranceRef.current = null;
+          if (e.error !== 'interrupted' && e.error !== 'canceled') {
+            console.warn('Speech synthesis error:', e.error);
+          }
+        };
+
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.error('Failed to speak text:', err);
+        setIsSpeaking(false);
+        setSpeakingId(null);
       }
-    } catch {}
-
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-      setSpeakingId(msgId || 'active');
-    };
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      setSpeakingId(null);
-    };
-    utterance.onerror = () => {
-      setIsSpeaking(false);
-      setSpeakingId(null);
-    };
-
-    window.speechSynthesis.speak(utterance);
+    }, 60);
   };
+
+  // Exposer la fonction speakText globalement pour conformité stricte avec la demande
+  if (typeof window !== 'undefined') {
+    (window as any).speakText = speakText;
+  }
 
   const handleSpeak = (text: string, msgId?: string) => {
     speakText(text, msgId);
   };
 
-  // Arrêt strict de la dictée vocale pour libérer le champ texte
-  const stopVoiceDictation = () => {
-    isListeningRef.current = false;
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
-    }
-    setIsListening(false);
-  };
-
-  // Speech Recognition (STT) using Web SpeechRecognition
+  // Speech Recognition (STT) - Reconnaissance vocale directe et conforme mobiles/PC
   const startVoiceDictation = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-    if (!SpeechRecognition) {
-      alert("La reconnaissance vocale n'est pas supportée par ce navigateur. Utilisez Chrome, Edge ou Safari.");
+    if (!SpeechRecClass) {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      setVoiceToast({
+        message: isMobile 
+          ? "Ce navigateur ne supporte pas la reconnaissance vocale. Ouvrez le chat dans Google Chrome ou Safari !"
+          : "La reconnaissance vocale nécessite un navigateur compatible comme Google Chrome, Safari ou Edge.",
+        type: 'error'
+      });
+      setTimeout(() => setVoiceToast(null), 6000);
       return;
     }
 
@@ -274,7 +453,7 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
     }
 
     try {
-      const recognition = new SpeechRecognition();
+      const recognition = new SpeechRecClass();
       recognitionRef.current = recognition;
       recognition.lang = 'fr-FR';
       recognition.continuous = false;
@@ -284,16 +463,20 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
       recognition.onstart = () => {
         isListeningRef.current = true;
         setIsListening(true);
+        setVoiceToast({
+          message: "🎙️ Micro actif ! Parlez clairement maintenant...",
+          type: 'success'
+        });
+        setTimeout(() => setVoiceToast(null), 3000);
       };
 
       recognition.onresult = (event: any) => {
-        // PROTECTION CRUCIALE : Si l'utilisateur est repassé au clavier ou a arrêté le micro, ignorer le résultat audio
         if (!isListeningRef.current) return;
         let transcript = '';
         for (let i = 0; i < event.results.length; i++) {
           transcript += event.results[i][0].transcript;
         }
-        if (transcript && isListeningRef.current) {
+        if (transcript) {
           setInputText(transcript);
         }
       };
@@ -301,16 +484,45 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
       recognition.onerror = (event: any) => {
         console.warn('SpeechRecognition error:', event.error);
         stopVoiceDictation();
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          setVoiceToast({
+            message: "🎙️ Accès au micro refusé. Veuillez autoriser le microphone dans votre navigateur.",
+            type: 'error'
+          });
+        } else if (event.error === 'no-speech') {
+          setVoiceToast({
+            message: "🎙️ Aucune parole détectée. Rapprochez-vous du micro et réessayez.",
+            type: 'info'
+          });
+        } else if (event.error === 'network') {
+          setVoiceToast({
+            message: "🎙️ Connexion internet requise pour la reconnaissance vocale.",
+            type: 'error'
+          });
+        } else if (event.error !== 'aborted') {
+          setVoiceToast({
+            message: `🎙️ Reconnaissance interrompue (${event.error}).`,
+            type: 'info'
+          });
+        }
+        setTimeout(() => setVoiceToast(null), 4500);
       };
 
       recognition.onend = () => {
-        stopVoiceDictation();
+        isListeningRef.current = false;
+        setIsListening(false);
       };
 
+      // Appel direct et synchrone dans le geste utilisateur (requis par iOS Safari & Android Chrome)
       recognition.start();
     } catch (err) {
       console.error('Error starting speech recognition:', err);
       stopVoiceDictation();
+      setVoiceToast({
+        message: "Impossible de démarrer le micro. Vérifiez les autorisations de votre appareil.",
+        type: 'error'
+      });
+      setTimeout(() => setVoiceToast(null), 4000);
     }
   };
 
@@ -506,6 +718,16 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
               title="Le Petit Coin Sagesse & Humour"
             >
               <Coffee className="w-4 h-4" />
+            </button>
+
+            {/* New Conversation Button */}
+            <button
+              onClick={handleNewConversation}
+              className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1"
+              title="Commencer une nouvelle discussion avec un accueil renouvelé"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden md:inline text-[11px]">Nouveau</span>
             </button>
           </div>
         </div>
@@ -712,20 +934,40 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
             </div>
           ) : (
             <>
+              {/* Voice Notification / Helper Toast */}
+              {voiceToast && (
+                <div className={`px-4 py-2.5 rounded-xl flex items-center justify-between text-xs animate-fadeIn shadow-lg border transition-all ${
+                  voiceToast.type === 'error'
+                    ? 'bg-rose-950/95 border-rose-500/60 text-rose-200'
+                    : voiceToast.type === 'success'
+                    ? 'bg-emerald-950/95 border-emerald-500/60 text-emerald-200'
+                    : 'bg-cyan-950/95 border-cyan-500/60 text-cyan-200'
+                }`}>
+                  <span className="font-medium leading-relaxed">{voiceToast.message}</span>
+                  <button
+                    type="button"
+                    onClick={() => setVoiceToast(null)}
+                    className="ml-2 text-slate-400 hover:text-white font-bold text-xs p-1 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
               {/* Active voice dictation banner */}
               {isListening && (
-                <div className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-950/80 to-amber-950/80 border border-rose-500/50 text-rose-200 flex items-center justify-between text-xs animate-fadeIn shadow-lg">
+                <div className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-rose-950/90 to-amber-950/90 border border-rose-500/60 text-rose-200 flex items-center justify-between text-xs animate-fadeIn shadow-lg">
                   <div className="flex items-center gap-2.5">
-                    <span className="relative flex h-2.5 w-2.5">
+                    <span className="relative flex h-3 w-3">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500" />
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500" />
                     </span>
                     <span className="font-semibold text-rose-200">Reconnaissance vocale active : dictez votre message...</span>
                   </div>
                   <button
                     type="button"
-                    onClick={startVoiceDictation}
-                    className="text-rose-400 hover:text-white font-bold text-xs underline cursor-pointer"
+                    onClick={stopVoiceDictation}
+                    className="px-2.5 py-1 rounded bg-rose-900/80 hover:bg-rose-800 text-rose-200 font-bold text-xs cursor-pointer transition-colors"
                   >
                     Arrêter
                   </button>
@@ -770,16 +1012,17 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
                   )}
                 </button>
 
-                {/* Text Input sécurisé contre l'auto-correction intempestive et les conflits audio */}
+                {/* Text Input avec support vocal sans interruption de focus */}
                 <input
                   type="text"
                   value={inputText}
-                  onFocus={stopVoiceDictation}
-                  onKeyDown={() => {
-                    if (isListeningRef.current) stopVoiceDictation();
+                  onKeyDown={(e) => {
+                    // Si l'utilisateur commence à taper manuellement au clavier, arrêter la dictée vocale
+                    if (isListeningRef.current && e.key !== 'Shift' && e.key !== 'Control' && e.key !== 'Alt') {
+                      stopVoiceDictation();
+                    }
                   }}
                   onChange={(e) => {
-                    if (isListeningRef.current) stopVoiceDictation();
                     setInputText(e.target.value);
                   }}
                   autoComplete="off"
