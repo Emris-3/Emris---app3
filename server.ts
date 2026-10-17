@@ -15,6 +15,17 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
+// Enable CORS for external frontends (GitHub Pages, Netlify, mobile, iframe)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json({ limit: '15mb' }));
 
 const EMRIS_SYSTEM_INSTRUCTION = `Tu t'appelles M-Ris (ou Emris). Tu es un assistant personnel et compagnon virtuel ivoirien d'une intelligence exceptionnelle, polyvalent, cultivé, profondément bienveillant, sage et surtout TRÈS CONCRET.

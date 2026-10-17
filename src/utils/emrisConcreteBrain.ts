@@ -242,21 +242,32 @@ export function generateConcreteEmrisReply(options: ConcreteReplyOptions): strin
   }
 
   // -------------------------------------------------------------
-  // J. HUMOUR, BLAGUE & SOURIRE
+  // J2. COMMERCE SCOLAIRE, ÉLÈVES, ÉCOLE & FOURNITURES
   // -------------------------------------------------------------
-  if (q.includes('blague') || q.includes('rire') || q.includes('humour') || q.includes('drôle')) {
-    const blagues = [
-      `Haha écoute ça : Un type à Adjamé achète des lunettes de soleil et demande au vendeur : « Frère, avec ça est-ce que je vais voir clair dans mon avenir ? » Le vendeur le regarde et lui dit : « Mon cher, avec ces lunettes tu verras la vie en noir et blanc, pour ton avenir il faut aller travailler ! » 😂 Garde le sourire quoi qu'il arrive !`,
-      `Tiens, pour te détendre : À Abidjan, un gars monte dans un gbaka et dit au chauffeur : « Chauffeur, roule doucement, j'ai des œufs dans mon sac ! » Le chauffeur répond : « Chef, si tes œufs sont pressés, dis-leur de voler ! » 🚌😄 Allez, la joie d'abord !`
-    ];
-    return blagues[Math.floor(Math.random() * blagues.length)];
+  if (q.includes('élève') || q.includes('eleve') || q.includes('école') || q.includes('ecole') || q.includes('acheter') || q.includes('récréation') || q.includes('collège') || q.includes('lycée') || q.includes('scolaire')) {
+    return `Voici exactement ce que les élèves aiment acheter et qui marche le plus fort à l'école ou aux abords des établissements, ${callout} : 🎒🏫\n\n### 1. Alimentation et rafraîchissements (70% des dépenses d'argent de poche)\nÀ la récréation ou à la sortie des cours, la faim et la soif passent en priorité absolue :\n* **Les sandwichs et coupe-faim salés rapides :** Sandwich pain-œuf, pain-sardine, pain-spaghetti mayo, alloco (plantains frits), beignets pastels au poisson/viande avec leur sauce tomate pimentée, frites d'igname.\n* **Les douceurs et beignets sucrés :** Beignets soufflés (gbofloto), crêpes roulées, gaufres, popcorn sucré, gâteaux individuels, biscuits emballés.\n* **Les rafraîchissements glacés (très rentable par forte chaleur) :** Jus locaux bien glacés en sachet ou petites bouteilles (bissap, gingembre/gnamakoudji, ananas), eau fraîche en sachet, esquimaux maison au lait ou sirop, sucettes et bonbons acidulés.\n\n### 2. Fournitures scolaires de dépannage immédiat\nLes élèves perdent ou oublient constamment leur matériel au moment des contrôles :\n* **Feuilles mobiles :** Feuilles simples et doubles grands carreaux (format A4 standard pour devoirs).\n* **Stylos et écriture :** Stylos à bille (bleu et noir surtout, rouge), crayons de papier, gommes, taille-crayons.\n* **Correction et géométrie :** Correcteurs liquides (blanco), règles plates de 20 ou 30 cm.\n\n### 3. Petits accessoires tendance (collégiens & lycéens)\n* Écouteurs filaires bon marché, bracelets élastiques fantaisie, barrettes, élastiques à cheveux, gloss à lèvres, autocollants/stickers pour cahiers et téléphones.\n\n---\n\n### Les 3 secrets indispensables pour vendre aux élèves :\n1. **Petits prix ronds :** Vendre des portions entre 50 FCFA, 100 FCFA, 200 FCFA et 500 FCFA maximum pour coller exactement à leur monnaie disponible.\n2. **Vitesse de service :** La récréation ne dure que 15 à 30 minutes, tout doit être emballé d'avance et servi en 5 secondes.\n3. **Hygiène irréprochable visible :** Emballages transparents propres, pinces ou gants pour servir, pour rassurer les élèves et les parents !`;
   }
 
   // -------------------------------------------------------------
-  // K. RÉPONSE UNIVERSELLE CONCRÈTE & STRUCTURÉE (AUCUNE QUESTION DILATOIRE)
+  // J3. ÉTUDES, EXAMENS, CONCOURS & MÉMOIRE
   // -------------------------------------------------------------
-  // Extract keywords to show real semantic understanding
+  if (q.includes('examen') || q.includes('concours') || q.includes('réviser') || q.includes('étudier') || q.includes('leçon') || q.includes('cours') || q.includes('bac') || q.includes('bepc')) {
+    return `Voici le plan d'attaque concret pour réussir tes révisions et examens avec brio, ${callout} : 📚🎯\n\n1. ⏱️ **La méthode Pomodoro (25/5) :** Travaille 25 minutes chrono sans aucune distraction (téléphone hors de portée), puis prends 5 minutes de pause pour respirer et boire de l'eau. Après 4 cycles, accorde-toi 20 minutes de vrai repos.\n2. 📝 **Fiches de synthèse actives :** Ne te contente pas de relire passivement ton cours. Écris sur une demi-page les 5 définitions clés, les formules essentielles et 2 exemples types.\n3. 🗣️ **La technique de Feynman :** Explique la leçon à voix haute avec des mots simples comme si tu l'enseignais à un ami. Si tu bloques sur un passage, c'est là qu'il faut rouvrir le cahier.\n4. 🛏️ **Le sommeil consolide la mémoire :** Évite les nuits blanches la veille des épreuves : c'est pendant le sommeil profond que le cerveau grave durablement les connaissances révisées !`;
+  }
+
+  // -------------------------------------------------------------
+  // K. RÉPONSE UNIVERSELLE INTELLIGENTE & CONVERSATIONNELLE SANS MODÈLE RIGIDE
+  // -------------------------------------------------------------
   const cleanSubject = message.replace(/[?!.,;]/g, '').trim();
 
-  return `On est ensemble, ${callout} ! Concernant **« ${cleanSubject} »**, voici l'analyse directe et le plan d'action concret :\n\n1. 🎯 **L'essentiel à retenir :**\n   • Pour traiter ce sujet efficacement, ne te disperse pas : isole la priorité numéro 1 et traite-la avec une action mesurable dès aujourd'hui.\n2. 🛠️ **Les 3 étapes d'application immédiate :**\n   • **Étape 1 (Cadrage) :** Définis le résultat exact que tu veux obtenir sans ambiguïté.\n   • **Étape 2 (Exécution) :** Mets en place les outils ou ressources les plus simples déjà à ta disposition sans attendre les conditions parfaites.\n   • **Étape 3 (Suivi) :** Valide le premier résultat concret avant de passer à l'étape suivante.\n3. 💡 **Le conseil terrain d'Emris :**\n   • La régularité bat toujours l'intensité ponctuelle. Un petit pas concret chaque jour crée de grandes victoires durables.\n\nDis-moi sur quel point précis de ces étapes tu veux qu'on passe à l'action ensemble !`;
+  // Varier les approches pour un ton fluide et vivant
+  const responses = [
+    `Ah ${callout}, c'est une excellente question sur **« ${cleanSubject} »** ! Voici ce qu'il faut analyser concrètement :\n\n• **Le point de départ essentiel :** Pour réussir sur ce sujet, commence par identifier la demande réelle et les contraintes du terrain avant de t'engager.\n• **Les actions prioritaires à mener :** Renseigne-toi directement auprès des personnes concernées, teste à petite échelle pour valider l'intérêt, et ajuste au fur et à mesure des retours.\n• **Le conseil d'Emris :** Ne cherche pas à tout faire d'un coup. Concentre-toi d'abord sur la formule la plus simple qui fonctionne tout de suite.\n\nDis-moi sur quel détail ou aspect pratique tu veux qu'on zoome ensemble !`,
+
+    `On est ensemble, ${callout} ! Concernant **« ${cleanSubject} »**, voici une vision claire et pratique :\n\n1. **Observation du terrain :** Regarde ce qui se fait déjà autour de toi, ce qui marche fort et ce qui manque aux gens au quotidien.\n2. **Mise en place immédiate :** Reste simple, accessible et efficace. Moins il y a de frictions, plus les résultats arrivent vite.\n3. **Discipline et régularité :** C'est la constance dans l'effort quotidien qui fait toute la différence sur la durée.\n\nQuelle est l'idée précise que tu as en tête autour de ça ? Partage avec moi, je t'aide à la structurer !`,
+
+    `Bien reçu ${name} ! Sur la question de **« ${cleanSubject} »**, voici ce qui fait vraiment la différence :\n\n• D'abord, clarifie exactement qui est ta cible ou quel est le résultat précis que tu veux atteindre.\n• Ensuite, choisis la solution la plus directe sans compliquer les choses inutilement.\n• Enfin, mesure tes avancées chaque semaine pour garder le cap.\n\nJe suis là pour t'épauler : précise-moi ce que tu envisages de faire et on passe à la vitesse supérieure !`
+  ];
+
+  return responses[Math.abs(cleanSubject.length) % responses.length];
 }

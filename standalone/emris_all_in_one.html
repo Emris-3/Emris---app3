@@ -2315,12 +2315,28 @@ function generateEmrisSmartReply(userText) {
     return `Haha écoute ça : Un type à Adjamé achète des lunettes de soleil et demande au vendeur : « Frère, avec ça est-ce que je vais voir clair dans mon avenir ? » Le vendeur lui dit : « Mon cher, avec ces lunettes tu verras la vie en noir et blanc, pour ton avenir il faut aller bosser ! » 😂 Garde le sourire !`;
   }
 
+  // Commerce scolaire, élèves, école, fournitures
+  if (q.includes('élève') || q.includes('eleve') || q.includes('école') || q.includes('ecole') || q.includes('acheter') || q.includes('scolaire') || q.includes('collège') || q.includes('lycée')) {
+    return `Voici exactement ce que les élèves aiment acheter et qui se vend le mieux à l'école ou aux abords des cours, ${callout} : 🎒🏫\n\n### 1. Nourriture & Rafraîchissements (70% des ventes)\n* **Sandwichs & Salé minute :** Pain-œuf, pain-sardine, pain-spaghetti mayo, alloco chaud, pastels au poisson/viande avec sauce pimentée.\n* **Douceurs sucrées :** Beignets soufflés (gbofloto), crêpes, gaufres, popcorn sucré, gâteaux individuels, biscuits.\n* **Boissons bien glacées :** Sachets de bissap frais, jus de gingembre (gnamakoudji), esquimaux maison au lait ou sirop, eau fraîche en sachet.\n\n### 2. Fournitures scolaires de dépannage\n* Feuilles simples et doubles grands carreaux (format devoirs), stylos bille (bleu, noir, rouge), blanco/correcteur, gommes, taille-crayons, règles.\n\n### 3. Petits accessoires tendance\n* Écouteurs filaires pas chers, bracelets fantaisie, barrettes, élastiques, gloss, stickers.\n\n---\n💡 **Conseils de vente indispensables :** Petits prix ronds (50 à 500 FCFA max), service ultra rapide (la récré ne dure que 15 à 30 min) et emballage propre bien visible !`;
+  }
+
+  // Études & révisions
+  if (q.includes('examen') || q.includes('concours') || q.includes('réviser') || q.includes('cours') || q.includes('étudier')) {
+    return `Voici la méthode concrète pour réussir tes révisions, ${callout} : 📚🎯\n\n1. ⏱️ **Méthode Pomodoro (25/5) :** Travaille 25 minutes sans téléphone, puis 5 minutes de pause. Répète 4 fois.\n2. 📝 **Fiches actives :** Note seulement les 5 définitions clés, formules et exemples par chapitre.\n3. 🗣️ **Répétition à voix haute :** Explique la leçon avec tes propres mots comme à un camarade.\n4. 🛏️ **Sommeil :** Le cerveau mémorise pendant la nuit, évite les nuits blanches !`;
+  }
+
+  // Salutations
   if (q.includes('bonjour') || q.includes('salut') || q.includes('coucou') || q.includes('c\'est comment') || q.includes('hello')) {
     return `Salut ${callout} ! On est ensemble. Pose-moi directement ta question ou explique-moi ce dont tu as besoin, je te réponds avec clarté, franchise et précision !`;
   }
 
   const cleanTopic = userText.replace(/[?!.,;]/g, '').trim();
-  return `On est ensemble, ${callout} ! Concernant **« ${cleanTopic} »**, voici l'essentiel concret :\n\n1. 🎯 **L'objectif :** Isole la priorité numéro 1 sans dispersion.\n2. 🛠️ **Plan d'action :** Cadrage du résultat attendu, exécution avec les moyens du bord, et validation du premier palier.\n3. 💡 **Conseil terrain :** La régularité quotidienne bat toujours les grands discours. Dis-moi quel point tu veux qu'on traite en détail !`;
+  const responses = [
+    `Ah ${callout}, c'est une excellente question sur **« ${cleanTopic} »** ! Voici ce qu'il faut analyser concrètement :\n\n• **Le point de départ :** Commence toujours par observer le besoin réel sur le terrain avant d'engager du temps ou de l'argent.\n• **L'exécution :** Teste d'abord la formule la plus simple qui apporte un résultat immédiat sans te compliquer la vie.\n• **Le conseil d'Emris :** Reste régulier et ajuste selon les premiers retours concrets.\n\nDis-moi sur quel détail pratique tu souhaites qu'on avance ensemble !`,
+    `On est ensemble, ${callout} ! Concernant **« ${cleanTopic} »**, voici ce qui fonctionne le mieux :\n\n1. **Regarde le terrain :** Vois ce qui marche déjà fort et ce qui manque au quotidien.\n2. **Reste simple et rapide :** Moins il y a d'obstacles, plus vite tu atteins ton objectif.\n3. **La constance :** Un petit pas chaque jour vaut mieux que de grands projets jamais lancés.\n\nQuelle est ton idée précise là-dessus ? Partage avec moi, je t'aide à la peaufiner !`,
+    `Bien reçu ${prenom} ! Sur le sujet de **« ${cleanTopic} »**, voici la clé :\n\n• Clarifie exactement ton objectif précis.\n• Choisis la solution la plus directe et accessible aujourd'hui.\n• Valide une première étape concrète sans attendre.\n\nJe suis là pour t'accompagner pas à pas, dis-moi ce que tu veux faire en premier !`
+  ];
+  return responses[Math.abs(cleanTopic.length) % responses.length];
 }
 
 function scrollChatToBottom() {

@@ -566,14 +566,24 @@ function generateEmrisSmartReply(userText) {
     return `Haha écoute ça : Un type à Adjamé achète des lunettes de soleil et demande au vendeur : « Frère, avec ça est-ce que je vais voir clair dans mon avenir ? » Le vendeur lui dit : « Mon cher, avec ces lunettes tu verras la vie en noir et blanc, pour ton avenir il faut aller bosser ! » 😂 Allez, garde le sourire !`;
   }
 
-  // Salutations
-  if (q.includes('bonjour') || q.includes('salut') || q.includes('coucou') || q.includes('c\'est comment') || q.includes('hello')) {
-    return `Salut ${callout} ! On est ensemble. Pose-moi directement ta question ou explique-moi ce dont tu as besoin, je te réponds avec clarté, franchise et précision !`;
+  // Commerce scolaire, élèves, école, fournitures
+  if (q.includes('élève') || q.includes('eleve') || q.includes('école') || q.includes('ecole') || q.includes('acheter') || q.includes('scolaire') || q.includes('collège') || q.includes('lycée')) {
+    return `Voici exactement ce que les élèves aiment acheter et qui se vend le mieux à l'école ou aux abords des cours, ${callout} : 🎒🏫\n\n### 1. Nourriture & Rafraîchissements (70% des ventes)\n* **Sandwichs & Salé minute :** Pain-œuf, pain-sardine, pain-spaghetti mayo, alloco chaud, pastels au poisson/viande avec sauce pimentée.\n* **Douceurs sucrées :** Beignets soufflés (gbofloto), crêpes, gaufres, popcorn sucré, gâteaux individuels, biscuits.\n* **Boissons bien glacées :** Sachets de bissap frais, jus de gingembre (gnamakoudji), esquimaux maison au lait ou sirop, eau fraîche en sachet.\n\n### 2. Fournitures scolaires de dépannage\n* Feuilles simples et doubles grands carreaux (format devoirs), stylos bille (bleu, noir, rouge), blanco/correcteur, gommes, taille-crayons, règles.\n\n### 3. Petits accessoires tendance\n* Écouteurs filaires pas chers, bracelets fantaisie, barrettes, élastiques, gloss, stickers.\n\n---\n💡 **Conseils de vente indispensables :** Petits prix ronds (50 à 500 FCFA max), service ultra rapide (la récré ne dure que 15 à 30 min) et emballage propre bien visible !`;
   }
 
-  // Réponse universelle concrète et directe (sans questions dilatoires)
+  // Études & révisions
+  if (q.includes('examen') || q.includes('concours') || q.includes('réviser') || q.includes('cours') || q.includes('étudier')) {
+    return `Voici la méthode concrète pour réussir tes révisions, ${callout} : 📚🎯\n\n1. ⏱️ **Méthode Pomodoro (25/5) :** Travaille 25 minutes sans téléphone, puis 5 minutes de pause. Répète 4 fois.\n2. 📝 **Fiches actives :** Note seulement les 5 définitions clés, formules et exemples par chapitre.\n3. 🗣️ **Répétition à voix haute :** Explique la leçon avec tes propres mots comme à un camarade.\n4. 🛏️ **Sommeil :** Le cerveau mémorise pendant la nuit, évite les nuits blanches !`;
+  }
+
+  // Réponse universelle naturelle et personnalisée
   const cleanTopic = userText.replace(/[?!.,;]/g, '').trim();
-  return `On est ensemble, ${callout} ! Concernant **« ${cleanTopic} »**, voici l'analyse directe et les étapes concrètes :\n\n1. 🎯 **L'essentiel :** Isole l'objectif prioritaire sans te disperser pour obtenir un résultat immédiat.\n2. 🛠️ **Plan d'action en 3 étapes :**\n   • **Étape 1 :** Définis le résultat exact attendu sous forme mesurable.\n   • **Étape 2 :** Mobilise les ressources ou outils les plus simples déjà à ta disposition sans attendre.\n   • **Étape 3 :** Valide ce premier résultat avant d'étendre la démarche.\n3. 💡 **Conseil terrain :** La régularité et l'exécution quotidienne valent mieux que de longs plans non appliqués. Dis-moi quel aspect précis tu souhaites approfondir en premier !`;
+  const responses = [
+    `Ah ${callout}, c'est une excellente question sur **« ${cleanTopic} »** ! Voici ce qu'il faut analyser concrètement :\n\n• **Le point de départ :** Commence toujours par observer le besoin réel sur le terrain avant d'engager du temps ou de l'argent.\n• **L'exécution :** Teste d'abord la formule la plus simple qui apporte un résultat immédiat sans te compliquer la vie.\n• **Le conseil d'Emris :** Reste régulier et ajuste selon les premiers retours concrets.\n\nDis-moi sur quel détail pratique tu souhaites qu'on avance ensemble !`,
+    `On est ensemble, ${callout} ! Concernant **« ${cleanTopic} »**, voici ce qui fonctionne le mieux :\n\n1. **Regarde le terrain :** Vois ce qui marche déjà fort et ce qui manque au quotidien.\n2. **Reste simple et rapide :** Moins il y a d'obstacles, plus vite tu atteins ton objectif.\n3. **La constance :** Un petit pas chaque jour vaut mieux que de grands projets jamais lancés.\n\nQuelle est ton idée précise là-dessus ? Partage avec moi, je t'aide à la peaufiner !`,
+    `Bien reçu ${prenom} ! Sur le sujet de **« ${cleanTopic} »**, voici la clé :\n\n• Clarifie exactement ton objectif précis.\n• Choisis la solution la plus directe et accessible aujourd'hui.\n• Valide une première étape concrète sans attendre.\n\nJe suis là pour t'accompagner pas à pas, dis-moi ce que tu veux faire en premier !`
+  ];
+  return responses[Math.abs(cleanTopic.length) % responses.length];
 }
 
 function scrollChatToBottom() {
@@ -730,6 +740,69 @@ window.copyMessageText = function(btn) {
     }
   }
 };
+
+// =========================================================================
+// GESTION DU CHAT & DES MESSAGES (AJOUTS DYNAMIQUES & ANTI-RÉPÉTITION)
+// =========================================================================
+
+function appendUserMessage(text) {
+  const container = document.getElementById('messagesContainer');
+  if (!container) return;
+  const row = document.createElement('div');
+  row.className = 'message-row user';
+  const timeStr = getCurrentTime();
+  row.innerHTML = `
+    <div class="msg-bubble">
+      <div>${formatMessageText(text)}</div>
+      <div class="msg-footer">
+        <span>${timeStr}</span>
+      </div>
+    </div>
+    <img src="${AVATARS.user}" class="msg-avatar" alt="Utilisateur">
+  `;
+  container.appendChild(row);
+  scrollChatToBottom();
+}
+
+function appendCompanionResponse(text) {
+  const container = document.getElementById('messagesContainer');
+  if (!container) return;
+  const row = document.createElement('div');
+  row.className = 'message-row mris';
+  const timeStr = getCurrentTime();
+  const avatar = companionGender === 'female' ? AVATARS.female : AVATARS.male;
+  
+  let formatted = escapeHtml(text)
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+
+  row.innerHTML = `
+    <img src="${avatar}" class="msg-avatar" alt="Emris">
+    <div class="msg-bubble">
+      <div>${formatted}</div>
+      <div class="msg-footer">
+        <span>${timeStr}</span>
+        <div class="msg-actions">
+          <button class="btn-msg-action" onclick="copyMessageText(this)" title="Copier"><i class="fa-regular fa-copy"></i></button>
+          <button class="btn-msg-action" onclick="speakMessageText(this)" title="Écouter"><i class="fa-solid fa-volume-high"></i></button>
+        </div>
+      </div>
+    </div>
+  `;
+  container.appendChild(row);
+  scrollChatToBottom();
+}
+
+function initChatConversation() {
+  const container = document.getElementById('messagesContainer');
+  if (!container) return;
+  container.innerHTML = '';
+  const prenom = (currentUser && currentUser.nom) ? currentUser.nom.split(' ')[0] : '';
+  const welcomeText = getRandomWelcomeText(prenom);
+  appendCompanionResponse(welcomeText);
+}
 
 // =========================================================================
 // ÉCOUTEURS D'ÉVÉNEMENTS & INTERACTIONS
@@ -936,9 +1009,13 @@ function initEventListeners() {
     scrollChatToBottom();
 
     try {
+      const API_BASE = (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.includes('run.app')))
+        ? ''
+        : 'https://ais-pre-yojeefvy2wylxcfq4ya433-175402587151.europe-west1.run.app';
+
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-      const resp = await fetch('/api/mris/chat', {
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const resp = await fetch(API_BASE + '/api/mris/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
