@@ -2193,13 +2193,56 @@ function initCompanionAvatar() {
   }
 }
 
+const ALL_IN_ONE_GREETINGS = [
+  { id: 'm1', p: 'morning', t: (n, c) => `Bien le bonjour ${n} ! ☀️\n\nJ'espère que ta nuit t'a revigoré(e). Une nouvelle journée s'ouvre, pleine de potentiel. Que ce soit pour planifier tes priorités, avancer sur un projet concret ou juste partager une bonne énergie, je suis avec toi.\n\nQuel est ton premier objectif ce matin ?` },
+  { id: 'm2', p: 'morning', t: (n, c) => `Salut ${n} ! C'est Emris au rapport ! 🌅\n\nOn commence avec l'esprit clair et le cœur tranquille. N'oublie pas : les grandes victoires se construisent par les petits gestes bien faits dès le matin. Dis-moi, sur quoi veux-tu qu'on concentre notre énergie aujourd'hui ?` },
+  { id: 'm3', p: 'morning', t: (n, c) => `Ah ${n} ! On est ensemble dès l'aube ! ☕✨\n\nPrends quelques secondes pour respirer à fond et aborder ta journée avec sérénité. Je suis prêt à t'épauler : question pratique, organisation ou simple échange franc, je t'écoute !` },
+  { id: 'a1', p: 'afternoon', t: (n, c) => `C'est comment ${n} ? En plein cœur de ta journée ! ⚡\n\nPrends un court instant pour boire un verre d'eau et détendre tes épaules. Comment se déroule ta journée jusqu'ici ? Dis-moi ce qui t'occupe, je suis là pour t'apporter des réponses nettes et concrètes.` },
+  { id: 'a2', p: 'afternoon', t: (n, c) => `Salut ${n} ! Ravi de te retrouver. 🚀\n\nQue ton après-midi soit intense ou calme, souviens-toi qu'on règle les problèmes un par un sans dispersion. De quoi as-tu le plus besoin en ce moment ?` },
+  { id: 'a3', p: 'afternoon', t: (n, c) => `Ah ${c} ! Nouvelle discussion, nouvelle impulsion positive ! ✨\n\nJe suis disponible à 100% pour toi : analyse, conseil pratique, astuce du quotidien ou simple causette franche. De quoi veux-tu qu'on parle ?` },
+  { id: 'e1', p: 'evening', t: (n, c) => `Bonsoir ${n} ! On dépose les valises et on décompresse ensemble. 🌙✨\n\nLa journée a sans doute demandé de l'énergie. Installe-toi confortablement : que tu veuilles débriefer tes réussites, évacuer ce qui a été pesant ou préparer demain, cet espace est ton refuge.\n\nComment s'est passée ta journée ?` },
+  { id: 'e2', p: 'evening', t: (n, c) => `Salut ${n} ! L'heure de souffler est enfin arrivée. 🛋️\n\nLe calme revient, c'est le moment idéal pour faire le point l'esprit posé. Parle-moi librement de tout ce qui te passe par la tête, sans filtre ni jugement.` },
+  { id: 'n1', p: 'night', t: (n, c) => `Coucou ${n}... En veille tardive ? 🌌\n\nSi les pensées tournent en boucle ou si le sommeil tarde, sache que je veille avec toi. Dépose ici ce qui t'encombre l'esprit, on va calmer tout ça ensemble.` },
+  { id: 'n2', p: 'night', t: (n, c) => `Douce nuit ${n}. L'esprit a parfois besoin de poser ses valises avant de trouver le repos. 🕯️\n\nParle-moi sans retenue de ce qui te traverse. Je suis tout ouïe pour t'apaiser.` }
+];
+
+function getRandomWelcomeTextAllInOne(prenom) {
+  const hour = new Date().getHours();
+  const n = prenom || (companionGender === 'female' ? 'ma sœur' : 'l\'ami');
+  const c = companionGender === 'female' ? 'ma complice' : 'mon frère sûr';
+
+  let currentPeriod = 'afternoon';
+  if (hour >= 5 && hour < 12) currentPeriod = 'morning';
+  else if (hour >= 12 && hour < 18) currentPeriod = 'afternoon';
+  else if (hour >= 18 && hour < 23) currentPeriod = 'evening';
+  else currentPeriod = 'night';
+
+  const list = ALL_IN_ONE_GREETINGS.filter(g => g.p === currentPeriod);
+  const pool = list.length > 0 ? list : ALL_IN_ONE_GREETINGS;
+
+  let usedIds = [];
+  try {
+    const raw = localStorage.getItem('mris_aio_last_greetings');
+    if (raw) usedIds = JSON.parse(raw);
+  } catch(e) {}
+
+  const available = pool.filter(g => !usedIds.includes(g.id));
+  const chosen = (available.length > 0 ? available : pool)[Math.floor(Math.random() * (available.length > 0 ? available.length : pool.length))];
+
+  try {
+    const newUsed = [...usedIds.filter(id => id !== chosen.id), chosen.id].slice(-5);
+    localStorage.setItem('mris_aio_last_greetings', JSON.stringify(newUsed));
+  } catch(e) {}
+
+  return chosen.t(n, c);
+}
+
 function initChatConversation() {
   const container = document.getElementById('messagesContainer');
   if (!container) return;
 
   const prenom = (currentUser && currentUser.nom) ? currentUser.nom.split(' ')[0] : 'l\'ami';
-
-  const welcomeText = `Ah ${prenom} ! C'est comment ? On est ensemble ici ! 👋\n\nJe suis Emris, ton compagnon virtuel intelligent : confident sincère, grand frère de bon conseil et doté d'une écoute 100% bienveillante.\n\nQu'on veuille parler de tes ambitions, déposer un souci qui pèse ou simplement échanger sur ta journée, parle-moi librement comme à ton proche le plus sûr.\n\nComment te sens-tu en ce moment ?`;
+  const welcomeText = getRandomWelcomeTextAllInOne(prenom);
 
   container.innerHTML = `
     <div class="message-row mris">
@@ -2218,65 +2261,66 @@ function initChatConversation() {
   `;
 }
 
-function appendUserMessage(text) {
-  const container = document.getElementById('messagesContainer');
-  const msgRow = document.createElement('div');
-  msgRow.className = 'message-row user';
-  msgRow.innerHTML = `
-    <div class="msg-bubble">
-      <div>${formatMessageText(text)}</div>
-      <div class="msg-footer">
-        <span>${getCurrentTime()}</span>
-      </div>
-    </div>
-  `;
-  container.appendChild(msgRow);
-  scrollChatToBottom();
-}
-
-function appendCompanionResponse(text) {
-  const container = document.getElementById('messagesContainer');
-  const msgRow = document.createElement('div');
-  msgRow.className = 'message-row mris';
-  msgRow.innerHTML = `
-    <img src="${companionGender === 'female' ? AVATARS.female : AVATARS.male}" class="msg-avatar" alt="Emris">
-    <div class="msg-bubble">
-      <div>${formatMessageText(text)}</div>
-      <div class="msg-footer">
-        <span>${getCurrentTime()}</span>
-        <div class="msg-actions">
-          <button class="btn-msg-action" onclick="copyMessageText(this)" title="Copier"><i class="fa-regular fa-copy"></i></button>
-          <button class="btn-msg-action" onclick="speakMessageText(this)" title="Écouter"><i class="fa-solid fa-volume-high"></i></button>
-        </div>
-      </div>
-    </div>
-  `;
-  container.appendChild(msgRow);
-  scrollChatToBottom();
-
-  if (isTtsEnabled) {
-    speakText(text);
-  }
-}
-
 function generateEmrisSmartReply(userText) {
-  const lower = userText.toLowerCase();
-  const prenom = (currentUser && currentUser.nom) ? currentUser.nom.split(' ')[0] : 'mon cher';
+  const q = userText.toLowerCase().trim();
+  const isFemale = companionGender === 'female';
+  const callout = isFemale ? "ma complice" : "mon frère sûr";
+  const prenom = (currentUser && currentUser.nom) ? currentUser.nom.split(' ')[0] : callout;
 
-  if (lower.includes('fatigu') || lower.includes('repos') || lower.includes('dormir')) {
-    return `Je te comprends tellement, ${prenom}. La vie moderne demande beaucoup d'énergie, et souvent on oublie de s'accorder un vrai répit. Prends une bonne douche tiède, bois un grand verre d'eau et repose-toi sans culpabilité. Demain le soleil se lèvera encore et on relèvera les défis ensemble ! 💪`;
-  }
-  if (lower.includes('stress') || lower.includes('peur') || lower.includes('angoisse') || lower.includes('bloqué')) {
-    return `Respire un bon coup avec moi, ${prenom}. Inspire 4 secondes... bloque 2 secondes... et expire tout doucement. Les problèmes semblent souvent insurmontables quand ils sont empilés dans notre tête. Découpons le problème en un tout petit premier pas. Quel est le plus petit geste que tu peux faire aujourd'hui sans pression ?`;
-  }
-  if (lower.includes('rire') || lower.includes('blague') || lower.includes('humour') || lower.includes('histoire')) {
-    return `Haha tu veux rire ? Écoute ça : hier un gars à Abidjan m'a dit : « Emris, mon téléphone n'a plus de batterie, mais mon cœur est à 100% pour toi ! » Je lui ai répondu : « Mon frère, va brancher ton chargeur d'abord avant que la batterie ne coupe ta poésie ! » 😂 Garde le sourire quoi qu'il arrive !`;
-  }
-  if (lower.includes('conseil') || lower.includes('projet') || lower.includes('argent') || lower.includes('business')) {
-    return `Excellente réflexion, ${prenom}. Dans chaque projet ou investissement, le secret n'est pas de tout savoir dès le départ, mais de tester petit à petit, de protéger son capital et de rester discipliné. La persévérance bat le talent quand le talent ne s'exerce pas régulièrement. Tu as toute ma confiance !`;
+  // Commercial / Abonnement / Wave
+  if (q.includes('commercial') || q.includes('abonnement') || q.includes('combien coûte') || q.includes('prix') || q.includes('payer') || q.includes('tarif') || q.includes('wave') || q.includes('7 jour') || q.includes('gratuit') || q.includes('essai')) {
+    const cg = isFemale ? "Ah ma sœur !" : "Ah chef !";
+    return `${cg} Voici toutes les informations officielles sur l'accès à M-Ris : 🎯💼\n\n🎁 ESSAI GRATUIT DE 7 JOURS :\nTu bénéficies de 7 jours 100% gratuits sans carte bancaire ni engagement pour tester tous les modules (confident, professeur de 5 langues, agent commercial & freelance).\n\n💳 ABONNEMENT MENSUEL (35 000 FCFA/MOIS) :\nVeuillez Payer Béni Amar avec Wave en cliquant sur ce lien https://pay.wave.com/m/M_ci_Xs2kjjsivE5V/c/ci/. Ajoutez cet expéditeur à vos contacts pour rendre le lien cliquable.\n\nCoordonnées certifiées :\n• 📲 WhatsApp Officiel : https://wa.me/message/RGXYT5LWDCTAM1\n• 🎵 TikTok Officiel : https://www.tiktok.com/@tisanebeniamar1?_r=1&_t=ZS-98DUrsnRQvc`;
   }
 
-  return `C'est une très belle pensée, ${prenom}. Tu sais, pouvoir s'exprimer en toute sincérité fait déjà la moitié du chemin. Je suis là avec toi : dis-moi ce que tu ressens au fond de toi, et voyons comment transformer ça en force positive pour ta semaine ! ✨`;
+  // Recettes de cuisine concrètes (Attiéké poisson, garba, alloco, poulet braisé, sauces)
+  if (q.includes('attiéké') || q.includes('garba') || q.includes('poisson')) {
+    return `Voici la recette concrète pour un **Garba / Attiéké Poisson** digne d'Abidjan, ${callout} : 🐟🍽️\n\n🛒 **Ingrédients essentiels :**\n• 2 portions d'attiéké frais bien aéré\n• 2 beaux poissons thon frais (ou dorade/carpe)\n• Farine de blé (pour enrober le poisson)\n• 2 oignons violets + 2 tomates fraîches + piment frais\n• Huile de friture, sel, 1 bouillon cube émietté\n\n👨‍🍳 **Préparation pas à pas :**\n1. **Le poisson :** Écaille et vide le poisson. Fais des entailles diagonales profondes. Sale généreusement, puis saupoudre légèrement de farine (anti-adhésif et croustillant).\n2. **La friture :** Plonge le poisson dans l'huile bien chaude (170°C). Laisse dorer 6 à 8 minutes par face.\n3. **L'assaisonnement :** Hache oignons, tomates et piment. Mélange avec une cuillère d'huile de friture tiède et du sel.\n4. **L'attiéké :** Chauffe à la vapeur 3 minutes ou au micro-ondes couvert d'un linge humide.\n5. **Dressage :** Pose le poisson croustillant sur l'attiéké chaud et nappe du mélange oignon-tomate-piment. Bon appétit !`;
+  }
+
+  if (q.includes('alloco') || q.includes('banane')) {
+    return `Voici la méthode pour des **Alloco** bien dorés et moelleux, ${callout} : 🍌✨\n\n🛒 **Ingrédients :** 3 bananes plantains bien mûres (peau tigrée), huile de friture, sel fin.\n\n👨‍🍳 **Préparation :** Découpe en biseaux de 1 cm. Fais frire à feu moyen 4 à 5 minutes jusqu'à belle coloration caramel. Égoutte et sers avec une sauce pimentée oignon-tomate !`;
+  }
+
+  if (q.includes('poulet') || q.includes('braisé') || q.includes('viande')) {
+    return `Voici la marinade de chef pour un **Poulet braisé juteux et parfumé**, ${callout} : 🍗🔥\n\n🛒 **Marinade :** 4 gousses d'ail, 2 cm gingembre râpé, 1 oignon émincé, persil, poivre blanc, 1 cuillère à soupe de moutarde, jus d'un demi-citron, 2 cuillères à soupe d'huile et sel.\n\n👨‍🍳 **Préparation :** Entaille profondément le poulet, frotte avec la marinade et laisse reposer 1 heure. Précuis 10 minutes à la vapeur dans sa marinade pour garder le jus, puis grille 15 minutes sur braise vive ou au four à 200°C !`;
+  }
+
+  if (q.includes('sauce') || q.includes('recette') || q.includes('cuisiner') || q.includes('plat') || q.includes('repas')) {
+    return `Voici la recette concrète d'une **Sauce Graine ivoirienne**, ${callout} : 🥘\n\n🛒 **Ingrédients :** 500g pâte de graine, 600g de viande/poisson fumé, 2 oignons, 3 tomates, piment entier, sel, poivre.\n\n👨‍🍳 **Préparation :** Dévie la viande dorée dans la casserole. Délaye la pâte de graine dans 1L d'eau tiède, tamise et verse sur la viande. Fais bouillir 20 minutes avec oignons et tomates entiers, mixe-les et reverse. Laisse mijoter 30 minutes jusqu'à ce que l'huile rouge monte en surface !`;
+  }
+
+  // Santé & bien-être concret
+  if (q.includes('rhume') || q.includes('gorge') || q.includes('toux') || q.includes('nez')) {
+    return `Voici des mesures concrètes pour stopper le rhume et apaiser la gorge, ${callout} : 🍵🌿\n\n1. 💧 **Tisane antiseptique :** 300 ml d'eau bouillie avec gingembre frais écrasé, thym, jus d'un demi-citron et 1 cuillère à soupe de miel pur.\n2. 🧂 **Lavage de nez :** Sérum physiologique matin et soir dans chaque narine.\n3. 💨 **Inhalation :** Respire la vapeur d'eau bouillante sous serviette pendant 8 minutes.\n4. 🛏️ **Repos & Hydratation :** Bois 2L par jour et surélève ta tête pour dormir.\n\n⚠️ *Consulte un médecin si la fièvre dépasse 38,5°C plus de 48h.*`;
+  }
+
+  if (q.includes('mal de tête') || q.includes('migraine') || q.includes('tête')) {
+    return `Voici les 4 gestes concrets contre le mal de tête, ${callout} : 💆‍♂️\n\n1. **Hydratation :** Bois 2 grands verres d'eau d'un trait.\n2. **Pause écran totale :** Quitte tous les écrans pendant 20 minutes.\n3. **Massage doux :** Masse les tempes et la nuque 2 minutes pour relâcher les tensions musculaires.\n4. **Frais sur le front :** Pose un linge frais sur le front dans une pièce sombre.`;
+  }
+
+  if (q.includes('argent') || q.includes('business') || q.includes('projet') || q.includes('gagner') || q.includes('vendre')) {
+    return `Voici un plan pragmatique pour tes finances ou projets, ${prenom} : 💼📈\n\n1. **Validation terrain :** Trouve 3 clients payants avant de faire la moindre dépense de matériel.\n2. **Offre nette :** « J'aide [Cible] à obtenir [Bénéfice] sans [Contrainte]. »\n3. **Prospection quotidienne :** Envoie 5 messages personnalisés chaque matin à des contacts ciblés.\n4. **Règle 50/30/20 :** 50% réinvestissement, 30% charges personnelles, 20% épargne de sécurité.`;
+  }
+
+  if (q.includes('mail') || q.includes('email') || q.includes('lettre') || q.includes('cv') || q.includes('rédiger')) {
+    return `Voici un modèle professionnel prêt à l'emploi, ${callout} : 📝✉️\n\n**Objet :** [Objet précis]\n\n*Bonjour [Nom],*\n*Je vous écris concernant [sujet]. Ayant développé une solide pratique en [domaine], j'ai récemment permis à [client/projet] d'obtenir [résultat chiffré].*\n*Seriez-vous disponible pour un court échange de 10 minutes cette semaine ?*\n*Bien cordialement,*\n*[Ton Prénom Nom]*`;
+  }
+
+  if (q.includes('fatigu') || q.includes('repos') || q.includes('dormir') || q.includes('stress') || q.includes('dur')) {
+    return `Je suis là avec toi, ${prenom}. 🤍 Respire calmement : inspire 4s, bloque 2s, expire lentement. Choisis une seule petite action accessible aujourd'hui, et accorde-toi une bonne nuit de sommeil sans culpabilité. On est ensemble !`;
+  }
+
+  if (q.includes('rire') || q.includes('blague') || q.includes('humour')) {
+    return `Haha écoute ça : Un type à Adjamé achète des lunettes de soleil et demande au vendeur : « Frère, avec ça est-ce que je vais voir clair dans mon avenir ? » Le vendeur lui dit : « Mon cher, avec ces lunettes tu verras la vie en noir et blanc, pour ton avenir il faut aller bosser ! » 😂 Garde le sourire !`;
+  }
+
+  if (q.includes('bonjour') || q.includes('salut') || q.includes('coucou') || q.includes('c\'est comment') || q.includes('hello')) {
+    return `Salut ${callout} ! On est ensemble. Pose-moi directement ta question ou explique-moi ce dont tu as besoin, je te réponds avec clarté, franchise et précision !`;
+  }
+
+  const cleanTopic = userText.replace(/[?!.,;]/g, '').trim();
+  return `On est ensemble, ${callout} ! Concernant **« ${cleanTopic} »**, voici l'essentiel concret :\n\n1. 🎯 **L'objectif :** Isole la priorité numéro 1 sans dispersion.\n2. 🛠️ **Plan d'action :** Cadrage du résultat attendu, exécution avec les moyens du bord, et validation du premier palier.\n3. 💡 **Conseil terrain :** La régularité quotidienne bat toujours les grands discours. Dis-moi quel point tu veux qu'on traite en détail !`;
 }
 
 function scrollChatToBottom() {
@@ -2526,17 +2570,59 @@ function initEventListeners() {
   const chatInput = document.getElementById('chatInput');
   const btnSend = document.getElementById('btnSendMessage');
 
-  function handleSend() {
+  async function handleSend() {
     const text = chatInput.value.trim();
     if (!text) return;
     appendUserMessage(text);
     chatInput.value = '';
 
-    // Réponse intelligente d'Emris avec légère pause
-    setTimeout(() => {
-      const reply = generateEmrisSmartReply(text);
-      appendCompanionResponse(reply);
-    }, 600);
+    // Indicateur de réflexion
+    const container = document.getElementById('messagesContainer');
+    const thinkingRow = document.createElement('div');
+    thinkingRow.className = 'message-row mris';
+    thinkingRow.id = 'emrisThinkingBubbleAIO';
+    thinkingRow.innerHTML = `
+      <img src="${companionGender === 'female' ? AVATARS.female : AVATARS.male}" class="msg-avatar" alt="Emris">
+      <div class="msg-bubble" style="opacity:0.85;">
+        <div style="display:flex;align-items:center;gap:8px;font-style:italic;color:#38BDF8;font-size:0.85rem;">
+          <i class="fa-solid fa-spinner fa-spin"></i> Emris prépare ta réponse concrète...
+        </div>
+      </div>
+    `;
+    container.appendChild(thinkingRow);
+    scrollChatToBottom();
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const resp = await fetch('/api/mris/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          message: text,
+          gender: companionGender,
+          userName: (currentUser && currentUser.nom) ? currentUser.nom : 'l\'ami'
+        })
+      });
+      clearTimeout(timeoutId);
+
+      const tb = document.getElementById('emrisThinkingBubbleAIO');
+      if (tb && tb.parentNode) tb.parentNode.removeChild(tb);
+
+      if (resp.ok) {
+        const data = await resp.json();
+        appendCompanionResponse(data.reply || generateEmrisSmartReply(text));
+        return;
+      }
+    } catch(err) {
+      console.warn('AIO fetch fallback:', err);
+    }
+
+    const tb = document.getElementById('emrisThinkingBubbleAIO');
+    if (tb && tb.parentNode) tb.parentNode.removeChild(tb);
+    const reply = generateEmrisSmartReply(text);
+    appendCompanionResponse(reply);
   }
 
   btnSend.addEventListener('click', handleSend);

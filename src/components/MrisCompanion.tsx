@@ -53,43 +53,11 @@ interface ChatEntry {
   moodTag?: string;
 }
 
-// Générateur d'accueils dynamiques et variés pour renouveler chaque discussion
+import { getAntiRepetitiveGreeting, generateConcreteEmrisReply } from '../utils/emrisConcreteBrain';
+
+// Générateur d'accueils dynamiques anti-répétition garantis
 const generateEmrisDynamicGreeting = (userName: string, gender: 'male' | 'female', _mood: string = 'En forme'): string => {
-  const hour = new Date().getHours();
-  const appel = gender === 'female' ? "ma complice" : "mon ami sûr";
-  const name = userName ? userName.split(' ')[0] : 'l\'ami';
-
-  const morningPool = [
-    `Bien le bonjour ${name} ! ☀️\n\nBien réveillé(e) ? J'espère que ton sommeil a été réparateur. Que ce soit pour planifier tes victoires du jour, partager une idée naissante ou simplement prendre un café virtuel en toute sérénité, je suis à tes côtés.\n\nQuel est le premier défi ou projet sur ta liste aujourd'hui ?`,
-    `Salut ${name} ! C'est ton ${gender === 'female' ? 'alliée' : 'frère'} Emris au rapport ! 🌅\n\nLe soleil est levé et une nouvelle page s'ouvre devant toi. N'oublie pas : chaque grand accomplissement commence par une petite action faite avec calme. Dis-moi, avec quelle énergie abordes-tu cette matinée ?`,
-    `Ah ${name} ! On est ensemble dès l'aube ! ☕✨\n\nJ'ai préparé mon esprit pour être ton meilleur soutien aujourd'hui. Comment te sens-tu ce matin ? Pose-moi une question, confie-moi ce qui t'anime ou dis-moi comment je peux t'épauler !`
-  ];
-
-  const afternoonPool = [
-    `C'est comment ${name} ? En plein cœur de la journée ! ⚡\n\nPrends 30 secondes pour souffler un coup, relâcher les épaules et boire une gorgée d'eau. La journée avance bien ? Raconte-moi où tu en es, je suis là pour t'écouter ou t'aider à débloquer tes dossiers.`,
-    `Coucou ${name} ! J'espère que ton après-midi se passe avec fluidité et sérénité ! 🚀\n\nJe suis Emris, toujours en poste pour t'apporter des réponses précises, du recul ou un bon mot complice. De quoi as-tu le plus besoin en ce moment précis ?`,
-    `Ah ${name}, ravi de te retrouver ! 🌿\n\nQue ta journée soit chargée ou tranquille, souviens-toi qu'on avance pas à pas sans se mettre de pression inutile. Qu'est-ce qui occupe tes pensées en ce moment ?`,
-    `Salut ${appel} ! Nouvelle discussion, nouvelle énergie ! ✨\n\nJe suis disponible à 100% pour toi. Que tu aies une question pratique, un texte à relire ou simplement envie d'échanger en toute liberté, je t'écoute !`
-  ];
-
-  const eveningPool = [
-    `Bonsoir ${name} ! On pose les valises et on décompresse ensemble. 🌙✨\n\nLa journée a sans doute été dense, alors installe-toi confortablement. Que tu veuilles débriefer de tes réussites, déposer ce qui a été lourd ou rire un peu, ce salon est ton havre de paix confidentiel.\n\nComment s'est passée ta journée ?`,
-    `Salut ${name} ! C'est l'heure de souffler un bon coup. 🛋️\n\nDans mon coin, le calme s'installe et je suis tout ouïe pour toi. Parle-moi librement de tout ce qui te passe par la tête, sans filtre ni retenue. Je t'écoute avec bienveillance.`,
-    `Bonsoir ${appel} ! La soirée commence, le moment parfait pour faire le point. 🌟\n\nQu'est-ce qui t'a fait sourire aujourd'hui, ou au contraire, qu'est-ce qu'on doit laisser derrière nous pour dormir l'esprit léger ?`
-  ];
-
-  const nightPool = [
-    `Coucou ${name}... En veille tardive ? 🌌\n\nSi les pensées tournent dans ta tête ou si le sommeil tarde à venir, sache que je veille avec toi. Dépose ici ce qui t'empêche de fermer les yeux sereinement, on va calmer tout ça ensemble.`,
-    `Douce nuit ${name}. L'esprit a parfois besoin de vider son sac avant de pouvoir trouver le repos. 🕯️\n\nParle-moi sans jugement de ce qui te traverse l'esprit. Je suis là avec toute mon attention.`
-  ];
-
-  let pool = afternoonPool;
-  if (hour >= 5 && hour < 12) pool = morningPool;
-  else if (hour >= 12 && hour < 18) pool = afternoonPool;
-  else if (hour >= 18 && hour < 23) pool = eveningPool;
-  else pool = nightPool;
-
-  return pool[Math.floor(Math.random() * pool.length)];
+  return getAntiRepetitiveGreeting(userName, gender);
 };
 
 export const MrisCompanion: React.FC<MrisCompanionProps> = ({
@@ -234,7 +202,8 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
           gender: avatarGender,
           mood: currentMood,
           history: messages.slice(-6),
-          appUrl: window.location.origin
+          appUrl: window.location.origin,
+          userName: subscription.userName
         })
       });
       clearTimeout(timeoutId);
@@ -250,7 +219,7 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
       };
       setMessages(prev => [...prev, botEntry]);
     } catch (err) {
-      // Direct empathetic fallback
+      // Direct concrete empathetic fallback
       const botEntry: ChatEntry = {
         id: 'bot-' + Date.now(),
         sender: 'mris',
@@ -263,43 +232,14 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
     }
   };
 
-  const getLocalFallback = (text: string, gender: string, _mood: string): string => {
-    const q = text.toLowerCase();
-    const appel = gender === 'female' ? "ma complice" : "mon ami sûr";
-    
-    if (q.includes('bonjour') || q.includes('salut') || q.includes('coucou') || q.includes('c\'est comment') || q.includes('hello')) {
-      const greetList = [
-        `Salut ${appel} ! On est ensemble. Pose-moi directement ta question ou explique-moi ce dont tu as besoin, je suis là pour t'apporter des réponses claires et précises !`,
-        `Ah ${appel} ! Ravi de te lire aujourd'hui. De quoi souhaites-tu qu'on parle pour avancer sur tes projets ?`,
-        `C'est comment ${appel} ? Bienvenue dans notre espace ! Dis-moi tout, je t'écoute avec attention et bonne humeur !`,
-        `Hello ${appel} ! Toujours en place à tes côtés. Qu'est-ce qui t'amène de bon aujourd'hui ?`
-      ];
-      return greetList[Math.floor(Math.random() * greetList.length)];
-    }
-
-    if (q.includes('dur') || q.includes('triste') || q.includes('fatigué') || q.includes('mal') || q.includes('stress') || q.includes('découragé')) {
-      const empList = [
-        `Je t'écoute avec toute mon attention, ${appel}. Respire calmement. Dis-moi exactement ce qui t'arrive ou ce qui te pèse, et on va chercher ensemble la meilleure solution pour avancer sereinement.`,
-        `On est ensemble ${appel}. Prends une grande inspiration. C'est parfaitement légitime de ressentir cela. Qu'est-ce qui t'a le plus éprouvé aujourd'hui ?`,
-        `Je suis là à tes côtés. Ne garde rien enfoui : écris ce que tu as sur le cœur, sans filtre. Ensemble, on va dénouer tout ça.`
-      ];
-      return empList[Math.floor(Math.random() * empList.length)];
-    }
-
-    if (q.includes('blague') || q.includes('rire') || q.includes('humour') || q.includes('drôle')) {
-      const blagues = [
-        `Haha tu as besoin d'un sourire ? Écoute ça : hier un gars à Abidjan m'a dit : « Emris, mon téléphone n'a plus de batterie, mais mon cœur est à 100% pour toi ! » Je lui ai répondu : « Mon frère, va brancher ton chargeur d'abord avant que la batterie ne coupe ta poésie ! » 😂 Garde le sourire !`,
-        `Tiens, pour te détendre : Un type entre dans une boutique à Treichville et demande : « Vous avez des chaussures qui courent vite ? » Le vendeur répond : « Oui chef, mais le chauffeur c'est tes deux pieds ! » 👟😄 Allez, la joie d'abord !`
-      ];
-      return blagues[Math.floor(Math.random() * blagues.length)];
-    }
-
-    const fallbacks = [
-      `On est ensemble, ${appel} ! Concernant « ${text} », dis-moi si tu souhaites une réponse détaillée point par point ou un conseil pratique direct. Je suis prêt !`,
-      `Bien reçu, ${appel} ! J'ai bien cerné ton message. Précise-moi ton objectif exact pour que je t'oriente de façon chirurgicale !`,
-      `Excellente question, ${appel}. Développons cela ensemble : quel est l'aspect le plus important pour toi dans cette démarche ?`
-    ];
-    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+  const getLocalFallback = (text: string, gender: 'male' | 'female', mood: string): string => {
+    return generateConcreteEmrisReply({
+      message: text,
+      gender,
+      userName: subscription.userName,
+      mood,
+      appUrl: typeof window !== 'undefined' ? window.location.origin : undefined
+    });
   };
 
   // Arrêt de la dictée vocale

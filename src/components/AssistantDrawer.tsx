@@ -14,6 +14,7 @@ import {
 } from '../services/drawerHistoryStorage';
 import avatarMaleImg from '../assets/images/mris_assistant_avatar_1791391815061.jpg';
 import avatarFemaleImg from '../assets/images/mris_avatar_female_1791394988073.jpg';
+import { getAntiRepetitiveGreeting, generateConcreteEmrisReply } from '../utils/emrisConcreteBrain';
 import { 
   Bot, 
   Send, 
@@ -83,64 +84,43 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
 
   const avatarSrc = avatarGender === 'male' ? avatarMaleImg : avatarFemaleImg;
 
-  // Build default welcome messages based on user state
-  const buildWelcomeMessages = (): DrawerChatMessage[] => {
+  // Build default welcome messages based on user state with guaranteed non-repetitive greetings
+  const buildWelcomeMessages = (forceDynamicGreeting = false): DrawerChatMessage[] => {
     const timeStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const dynamicGreeting = getAntiRepetitiveGreeting(subscriptionRequest?.userName, avatarGender);
 
-    if (subscriptionRequest) {
-      const isTrial = subscriptionRequest.isTrial || subscriptionRequest.status === 'trial';
-      if (isTrial) {
-        return [
-          {
-            id: 'msg-t1',
-            sender: 'mris',
-            text: `Ah ${subscriptionRequest.userName} ! 🎉 Ton essai gratuit de 7 jours est bien actif sur l'application ! On est ensemble !`,
-            time: timeStr
-          },
-          {
-            id: 'msg-t2',
-            sender: 'mris',
-            text: `Tu peux discuter avec moi en illimité, me poser toutes tes questions, ou juste venir décompresser. Si tu veux passer ensuite à l'abonnement mensuel officiel à 35 000 FCFA/mois via Wave pour Béni Amar, je te guide pas à pas. Comment tu te sens aujourd'hui ?`,
-            time: timeStr,
-            action: {
-              label: 'WhatsApp Béni Amar',
-              type: 'whatsapp'
-            }
+    if (!forceDynamicGreeting && subscriptionRequest && subscriptionRequest.status === 'pending') {
+      return [
+        {
+          id: 'msg-1',
+          sender: 'mris',
+          text: `Ah ${subscriptionRequest.userName} ! 👋 C'est Emris ! J'ai bien reçu la notification de ton dossier d'abonnement.`,
+          time: timeStr
+        },
+        {
+          id: 'msg-2',
+          sender: 'mris',
+          text: `Ta demande (${FORMAT_FCFA(subscriptionRequest.amount)}) est actuellement « En attente ». Ton reçu de paiement Wave pour Béni Amar est entre de bonnes mains pour validation manuelle. Dès que l'administrateur valide, tes 30 jours complets sont débloqués immédiatement !`,
+          time: timeStr
+        },
+        {
+          id: 'msg-3',
+          sender: 'mris',
+          text: `En attendant la confirmation ou si tu as besoin d'une activation express, tu peux aussi faire coucou sur WhatsApp avec ta capture. Dis-moi, as-tu une question pour moi ?`,
+          time: timeStr,
+          action: {
+            label: 'Confirmer sur WhatsApp',
+            type: 'whatsapp'
           }
-        ];
-      } else {
-        return [
-          {
-            id: 'msg-1',
-            sender: 'mris',
-            text: `Ah ${subscriptionRequest.userName} ! 👋 C'est Emris ! J'ai bien reçu la notification de ton dossier d'abonnement.`,
-            time: timeStr
-          },
-          {
-            id: 'msg-2',
-            sender: 'mris',
-            text: `Ta demande (${FORMAT_FCFA(subscriptionRequest.amount)}) est actuellement « En attente ». Ton reçu de paiement Wave pour Béni Amar est entre de bonnes mains pour validation manuelle. Dès que l'administrateur valide, tes 30 jours complets sont débloqués immédiatement !`,
-            time: timeStr
-          },
-          {
-            id: 'msg-3',
-            sender: 'mris',
-            text: `En attendant la confirmation ou si tu as besoin d'une activation express, tu peux aussi faire coucou sur WhatsApp avec ta capture. Dis-moi, as-tu une question pour moi ?`,
-            time: timeStr,
-            action: {
-              label: 'Confirmer sur WhatsApp',
-              type: 'whatsapp'
-            }
-          }
-        ];
-      }
+        }
+      ];
     }
 
     return [
       {
-        id: 'msg-def',
+        id: 'msg-dynamic-' + Date.now(),
         sender: 'mris',
-        text: `Ah chef ! C'est Emris, ton compagnon virtuel intelligent ! 👋\n\nFigure-toi que je venais de me faire un petit attiéké virtuel dans mon coin. Tu tombes à pic ! Que ce soit pour papoter, demander un conseil de sage ou des infos sur l'abonnement Wave à 35 000 FCFA/mois (et l'essai gratuit de 7 jours), je suis là pour toi. Comment va le moral ?`,
+        text: dynamicGreeting,
         time: timeStr
       }
     ];
@@ -199,9 +179,9 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
     }
   }, [messages, isLoading, showHistory]);
 
-  // Start a fresh new chat session
+  // Start a fresh new chat session with guaranteed non-repetitive greeting
   const handleStartNewChat = () => {
-    const welcomeMsgs = buildWelcomeMessages();
+    const welcomeMsgs = buildWelcomeMessages(true);
     const newSession = createNewSession(welcomeMsgs, 'Nouvel échange avec Emris');
     setCurrentSession(newSession);
     setMessages(newSession.messages);
@@ -530,7 +510,8 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
           gender: avatarGender,
           mood: 'Bien',
           history: newMessages.slice(-6),
-          appUrl: window.location.origin
+          appUrl: window.location.origin,
+          userName: subscriptionRequest?.userName
         })
       });
       clearTimeout(timeoutId);
@@ -583,26 +564,12 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
   };
 
   const getDrawerFallback = (queryText: string, gender: 'male' | 'female'): string => {
-    const q = queryText.toLowerCase();
-    const callout = gender === 'female' ? "ma complice" : "mon cher";
-
-    if (q.includes('délai') || q.includes('temps') || q.includes('combien') || q.includes('attente')) {
-      return `Ah ${callout}, la validation manuelle par l'administrateur prend en moyenne 5 à 15 minutes dès réception du reçu Wave pour Béni Amar. En cas d'urgence, clique sur le bouton WhatsApp pour une activation express ! On gère ça vite fait bien fait.`;
-    }
-    if (q.includes('wave') || q.includes('payer') || q.includes('comment') || q.includes('lien')) {
-      return `Pour régler l'abonnement à 35 000 FCFA/mois, clique sur le lien Wave officiel : https://pay.wave.com/m/M_ci_Xs2kjjsivE5V/c/ci/ pour Béni Amar. Dès le paiement terminé, capture l'écran et téléverse-le dans l'onglet Abonnement !`;
-    }
-    if (q.includes('essai') || q.includes('gratuit') || q.includes('7 jour') || q.includes('7') || q.includes('application') || q.includes('compagnon') || q.includes('commercial')) {
-      const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://m-ris-compagnon-virtuel.app';
-      return `🎁 OFFRE OFFICIELLE 7 JOURS GRATUITS :\nTu bénéficies de 7 JOURS D'UTILISATION 100% GRATUITE de l'application « M-Ris le compagnon virtuel » sans aucun engagement ni carte bancaire !\n\n📲 Accède directement à l'application ici pour commencer :\n👉 ${appUrl}\n\n💳 APRÈS L'ESSAI : ABONNEMENT MENSUEL (35 000 FCFA/MOIS) :\nÀ l'issue de tes 7 jours offerts, tu peux poursuivre avec l'abonnement mensuel à 35 000 FCFA/mois via Wave Business Béni Amar :\n👉 Veuillez Payer Béni Amar avec Wave en cliquant sur ce lien https://pay.wave.com/m/M_ci_Xs2kjjsivE5V/c/ci/. Ajoutez cet expéditeur à vos contacts pour rendre le lien cliquable.\n\nTes canaux de contact officiels :\n• WhatsApp f3 : https://wa.me/message/RGXYT5LWDCTAM1\n• TikTok : https://www.tiktok.com/@tisanebeniamar1?_r=1&_t=ZS-98DUrsnRQvc\n\nOn est ensemble !`;
-    }
-    if (q.includes('bonjour') || q.includes('salut') || q.includes('coucou') || q.includes('c\'est comment')) {
-      return `Salut ${callout} ! On est ensemble. Pose-moi directement ta question ou exprime ton besoin, je te réponds avec précision et clarté !`;
-    }
-    if (q.includes('fatigué') || q.includes('triste') || q.includes('dur') || q.includes('stress')) {
-      return `Je t'écoute avec attention, ${callout}. Explique-moi ce qui t'arrive ou la difficulté que tu rencontres, et on regarde tout de suite les solutions concrètes ensemble.`;
-    }
-    return `On est ensemble, ${callout} ! J'ai bien reçu ta demande : « ${queryText} ». Je suis à ton entière disposition pour t'apporter des détails précis, une démarche étape par étape ou un conseil adapté.`;
+    return generateConcreteEmrisReply({
+      message: queryText,
+      gender,
+      userName: subscriptionRequest?.userName,
+      appUrl: typeof window !== 'undefined' ? window.location.origin : undefined
+    });
   };
 
   if (!isOpen) return null;
