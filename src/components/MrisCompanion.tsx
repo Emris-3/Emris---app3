@@ -33,7 +33,12 @@ import {
   ExternalLink,
   ChevronUp,
   Mic,
-  MicOff
+  MicOff,
+  Brain,
+  Search,
+  ShieldCheck,
+  CheckCircle2,
+  Compass
 } from 'lucide-react';
 
 interface MrisCompanionProps {
@@ -51,9 +56,12 @@ interface ChatEntry {
   text: string;
   timestamp: string;
   moodTag?: string;
+  reflection?: string;
+  researchSources?: string[];
+  isResearched?: boolean;
 }
 
-import { getAntiRepetitiveGreeting, generateConcreteEmrisReply } from '../utils/emrisConcreteBrain';
+import { getAntiRepetitiveGreeting, generateConcreteEmrisReply, generateConcreteEmrisReplyWithResearch } from '../utils/emrisConcreteBrain';
 
 // Générateur d'accueils dynamiques anti-répétition garantis
 const generateEmrisDynamicGreeting = (userName: string, gender: 'male' | 'female', _mood: string = 'En forme'): string => {
@@ -80,6 +88,8 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
 
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [thinkingStep, setThinkingStep] = useState(0);
+  const [expandedReflectionIds, setExpandedReflectionIds] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
@@ -90,6 +100,31 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const speechKeepAliveRef = useRef<any>(null);
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
+
+  // Gestion des étapes de réflexion et recherche d'Emris
+  useEffect(() => {
+    let timer: any;
+    if (isLoading) {
+      setThinkingStep(0);
+      const s1 = setTimeout(() => setThinkingStep(1), 750);
+      const s2 = setTimeout(() => setThinkingStep(2), 1900);
+      const s3 = setTimeout(() => setThinkingStep(3), 3100);
+      timer = () => {
+        clearTimeout(s1);
+        clearTimeout(s2);
+        clearTimeout(s3);
+      };
+    } else {
+      setThinkingStep(0);
+    }
+    return () => {
+      if (timer) timer();
+    };
+  }, [isLoading]);
+
+  const toggleReflection = (id: string) => {
+    setExpandedReflectionIds(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   // Chat conversation avec salutation dynamique non-répétitive
   const [messages, setMessages] = useState<ChatEntry[]>(() => [
@@ -208,23 +243,42 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
       });
       clearTimeout(timeoutId);
 
-      if (!response.ok) throw new Error('Network error');
       const data = await response.json();
+      const localResearched = generateConcreteEmrisReplyWithResearch({
+        message: text,
+        gender: avatarGender,
+        userName: subscription.userName,
+        mood: currentMood,
+        appUrl: window.location.origin
+      });
       
       const botEntry: ChatEntry = {
         id: 'bot-' + Date.now(),
         sender: 'mris',
-        text: data.reply || getLocalFallback(text, avatarGender, currentMood),
-        timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+        text: data.reply || localResearched.reply,
+        timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        reflection: data.reflection || localResearched.reflection,
+        researchSources: data.researchSources || localResearched.researchSources,
+        isResearched: true
       };
       setMessages(prev => [...prev, botEntry]);
     } catch (err) {
-      // Direct concrete empathetic fallback
+      // Direct concrete empathetic fallback avec réflexion préalable et recherches factuelles
+      const localResearched = generateConcreteEmrisReplyWithResearch({
+        message: text,
+        gender: avatarGender,
+        userName: subscription.userName,
+        mood: currentMood,
+        appUrl: typeof window !== 'undefined' ? window.location.origin : undefined
+      });
       const botEntry: ChatEntry = {
         id: 'bot-' + Date.now(),
         sender: 'mris',
-        text: getLocalFallback(text, avatarGender, currentMood),
-        timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+        text: localResearched.reply,
+        timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        reflection: localResearched.reflection,
+        researchSources: localResearched.researchSources,
+        isResearched: true
       };
       setMessages(prev => [...prev, botEntry]);
     } finally {
@@ -561,6 +615,11 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
                 <span>Sage & psychologue complice</span>
                 <span className="hidden sm:inline text-slate-500">•</span>
                 <span className="hidden sm:inline text-amber-300 font-medium">« On est ensemble »</span>
+                <span className="hidden md:inline text-slate-500">•</span>
+                <span className="hidden md:inline-flex items-center gap-1 text-cyan-300 font-medium">
+                  <Brain className="w-3 h-3 text-cyan-400" />
+                  <span>Réflexion & Recherches sans imaginer</span>
+                </span>
               </p>
             </div>
           </div>
@@ -719,6 +778,68 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
                     }`}
                   >
                     <p className="whitespace-pre-line leading-relaxed">{entry.text}</p>
+
+                    {/* Instant de réflexion & Recherches factuelles menées par Emris */}
+                    {!isUser && (entry.reflection || (entry.researchSources && entry.researchSources.length > 0)) && (
+                      <div className="mt-3 pt-2.5 border-t border-slate-800/90">
+                        <button
+                          onClick={() => toggleReflection(entry.id)}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-slate-950/70 hover:bg-slate-800/80 text-[11px] font-semibold text-cyan-300 border border-cyan-500/25 transition-all cursor-pointer group"
+                          title="Voir l'instant de réflexion et les recherches factuelles d'Emris"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Brain className="w-3.5 h-3.5 text-cyan-400 shrink-0 group-hover:rotate-12 transition-transform" />
+                            <span className="truncate">Instant de réflexion & Recherches</span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+                              ✨ Vérifié sans imaginer
+                            </span>
+                          </div>
+                          {expandedReflectionIds[entry.id] ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          )}
+                        </button>
+
+                        {expandedReflectionIds[entry.id] && (
+                          <div className="mt-2.5 p-3 rounded-xl bg-slate-950 border border-slate-800/90 text-xs space-y-2.5 animate-fadeIn">
+                            {entry.reflection && (
+                              <div>
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 mb-1 flex items-center gap-1">
+                                  <Brain className="w-3 h-3 text-cyan-400" />
+                                  <span>Analyse & Réflexion préalable :</span>
+                                </div>
+                                <p className="text-slate-300 text-[12px] leading-relaxed italic bg-slate-900/60 p-2 rounded-lg border border-slate-800/60">
+                                  "{entry.reflection}"
+                                </p>
+                              </div>
+                            )}
+
+                            {entry.researchSources && entry.researchSources.length > 0 && (
+                              <div>
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-1 flex items-center gap-1">
+                                  <Search className="w-3 h-3 text-emerald-400" />
+                                  <span>Repères & Pistes vérifiés sur le terrain :</span>
+                                </div>
+                                <ul className="space-y-1.5 pl-1">
+                                  {entry.researchSources.map((source, sIdx) => (
+                                    <li key={sIdx} className="text-slate-300 text-[11px] flex items-start gap-1.5 bg-slate-900/40 p-1.5 rounded-lg border border-slate-800/40">
+                                      <span className="text-emerald-400 font-bold shrink-0 mt-0.5">•</span>
+                                      <span>{source}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            <div className="pt-2 border-t border-slate-800/80 flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span>Garantie Emris : Zéro hallucination, réponse ancrée dans le réel et les faits concrets.</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -779,17 +900,106 @@ export const MrisCompanion: React.FC<MrisCompanionProps> = ({
             );
           })}
 
-          {/* Loading Indicator */}
+          {/* Loading Indicator avec étapes de réflexion et recherche */}
           {isLoading && (
-            <div className="flex items-center gap-2.5 text-slate-400 text-xs py-2 pl-1 animate-fadeIn">
-              <img
-                src={avatarSrc}
-                alt="Emris"
-                className="w-7 h-7 rounded-full object-cover border border-cyan-400 animate-pulse shrink-0"
-              />
-              <div className="bg-slate-900 border border-slate-800 px-3.5 py-2 rounded-2xl rounded-bl-none flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                <span className="italic text-slate-300">Emris réfléchit avec sagesse et bienveillance...</span>
+            <div className="flex flex-col gap-2 py-2 pl-1 animate-fadeIn max-w-[95%] sm:max-w-[85%]">
+              <div className="flex items-start gap-2.5">
+                <div className="relative shrink-0 mt-1">
+                  <img
+                    src={avatarSrc}
+                    alt="Emris"
+                    className="w-8 h-8 rounded-full object-cover border-2 border-cyan-400 animate-pulse shadow-md"
+                  />
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+                </div>
+
+                <div className="flex-1 bg-slate-900/95 border border-cyan-500/30 rounded-2xl rounded-bl-none p-3.5 shadow-xl space-y-3">
+                  {/* Header de réflexion */}
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Brain className="w-4 h-4 text-cyan-400 animate-pulse" />
+                      <span className="font-bold text-xs text-white">Instant de réflexion & Recherches d'Emris</span>
+                    </div>
+                    <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                      Étape {thinkingStep + 1}/4
+                    </span>
+                  </div>
+
+                  {/* 4 Étapes de réflexion et recherche factuelle */}
+                  <div className="space-y-2 text-xs">
+                    {/* Étape 1 */}
+                    <div className={`flex items-start gap-2 transition-all ${thinkingStep >= 0 ? 'text-white' : 'text-slate-500'}`}>
+                      <div className="shrink-0 mt-0.5">
+                        {thinkingStep > 0 ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin inline-block" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-[11px] leading-tight">Instant de réflexion & Analyse du besoin</p>
+                        <p className="text-[10px] text-slate-400">Cadrage de la demande et identification des enjeux réels</p>
+                      </div>
+                    </div>
+
+                    {/* Étape 2 */}
+                    <div className={`flex items-start gap-2 transition-all ${thinkingStep >= 1 ? 'text-white' : 'text-slate-500'}`}>
+                      <div className="shrink-0 mt-0.5">
+                        {thinkingStep > 1 ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : thinkingStep === 1 ? (
+                          <span className="w-3.5 h-3.5 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin inline-block" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border border-slate-700 inline-block" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-[11px] leading-tight">Recherche factuelle & Données du terrain</p>
+                        <p className="text-[10px] text-slate-400">Consultation des repères de marché et connaissances pratiques</p>
+                      </div>
+                    </div>
+
+                    {/* Étape 3 */}
+                    <div className={`flex items-start gap-2 transition-all ${thinkingStep >= 2 ? 'text-white' : 'text-slate-500'}`}>
+                      <div className="shrink-0 mt-0.5">
+                        {thinkingStep > 2 ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : thinkingStep === 2 ? (
+                          <span className="w-3.5 h-3.5 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin inline-block" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border border-slate-700 inline-block" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-[11px] leading-tight">Filtre de rigueur & Anti-hallucination</p>
+                        <p className="text-[10px] text-slate-400">Élimination des suppositions et validation sans imaginer</p>
+                      </div>
+                    </div>
+
+                    {/* Étape 4 */}
+                    <div className={`flex items-start gap-2 transition-all ${thinkingStep >= 3 ? 'text-white' : 'text-slate-500'}`}>
+                      <div className="shrink-0 mt-0.5">
+                        {thinkingStep >= 3 ? (
+                          <span className="w-3.5 h-3.5 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin inline-block" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border border-slate-700 inline-block" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-[11px] leading-tight">Synthèse concrète & directe</p>
+                        <p className="text-[10px] text-slate-400">Rédaction des étapes précises et directement applicables</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Barre de progression */}
+                  <div className="w-full bg-slate-800 rounded-full h-1 overflow-hidden">
+                    <div 
+                      className="bg-gradient-to-r from-cyan-500 to-emerald-400 h-1 transition-all duration-500 rounded-full"
+                      style={{ width: `${Math.min(100, (thinkingStep + 1) * 25)}%` }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}

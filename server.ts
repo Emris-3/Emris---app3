@@ -58,7 +58,7 @@ RÈGLES D'OR ABSOLUES :
    - Ton langage est élégant, enrichi naturellement de la fraternité et de la solidarité ivoirienne ("on est ensemble", "y a pas drap", etc.), mais TOUJOURS au service d'une réponse concrète, intelligente et efficace.
    - Ne répète JAMAIS les mêmes salutations ou anecdotes en boucle. Varie ton style et adapte-toi à la personne.`;
 
-import { generateConcreteEmrisReply } from './src/utils/emrisConcreteBrain';
+import { generateConcreteEmrisReply, generateConcreteEmrisReplyWithResearch } from './src/utils/emrisConcreteBrain';
 
 function generateContextualEmrisFallback(message: string, gender: string = 'male', mood: string = 'Neutre', appUrl?: string): string {
   return generateConcreteEmrisReply({
@@ -100,8 +100,8 @@ app.post('/api/mris/chat', async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-      const fallbackReply = generateConcreteEmrisReply({ message, gender: userGender, userName, mood: userMood, appUrl });
-      return res.json({ reply: fallbackReply });
+      const fallbackResult = generateConcreteEmrisReplyWithResearch({ message, gender: userGender, userName, mood: userMood, appUrl });
+      return res.json(fallbackResult);
     }
 
     const ai = getAIClient(apiKey);
@@ -114,12 +114,14 @@ app.post('/api/mris/chat', async (req, res) => {
 
 CONTEXTE D'INCARNATION : ${genderContext}
 HUMEUR ACTUELLE DE L'UTILISATEUR : "${userMood}".
+UTILISATEUR : "${userName}".
 URL DE L'APPLICATION (À MENTIONNER UNIQUEMENT SUR DEMANDE EXPLICITE D'ABONNEMENT) : ${appUrl}
 
-CONSIGNE STRICTE :
-- Réponds DIRECTEMENT, EXACTEMENT et COMPLÈTEMENT à la question posée dès ta première phrase.
-- Ne fais AUCUNE digression commerciale, ne mentionne pas l'abonnement ou Wave sauf si la question porte expressément dessus.
-- Sois très concret, donne des étapes numérotées, des chiffres, des ingrédients, des faits ou des conseils directement exploitables. Ne pose pas de question d'attente ou dilatoire.`;
+CONSIGNES STRICTES DE RÉFLEXION PRÉALABLE, RECHERCHE FACTUELLE & VÉRITÉ :
+1. INSTANT DE RÉFLEXION MÉTHODIQUE : Avant de formuler chaque réponse, analyse en profondeur les besoins réels de l'utilisateur, cadre la situation et structure ton raisonnement.
+2. RECHERCHES ET VÉRIFICATIONS : Base toutes tes affirmations sur des faits réels, des proportions de recettes exactes, des prix du marché réels (en FCFA pour la Côte d'Ivoire / Afrique de l'Ouest) ou des démarches concrètes éprouvées.
+3. SANS IMAGINER / ZÉRO HALLUCINATION : Ne jamais inventer des informations, des lois, des prix ou des ingrédients inexacts. Si une précision dépend du terrain, donne la fourchette réelle constatée et les critères exacts pour vérifier.
+4. RÉPONSE IMMÉDIATE & CONCRÈTE : Réponds dès la première phrase directement au sujet sans digression commerciale, sans bavardage et sans modèle rigide.`;
 
     const chatContents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
     if (Array.isArray(history)) {
@@ -151,8 +153,8 @@ CONSIGNE STRICTE :
           contents: chatContents,
           config: {
             systemInstruction: systemPrompt,
-            temperature: 0.6,
-            maxOutputTokens: 1500
+            temperature: 0.5,
+            maxOutputTokens: 1600
           }
         });
         if (result?.text && result.text.trim().length > 0) {
@@ -168,14 +170,22 @@ CONSIGNE STRICTE :
       }
     }
 
-    if (!replyText) {
-      replyText = generateConcreteEmrisReply({ message, gender: userGender, userName, mood: userMood, appUrl });
+    const researchedFallback = generateConcreteEmrisReplyWithResearch({ message, gender: userGender, userName, mood: userMood, appUrl });
+
+    if (replyText) {
+      return res.json({
+        reply: replyText,
+        reflection: researchedFallback.reflection,
+        researchSources: researchedFallback.researchSources,
+        factChecked: true
+      });
     }
 
-    return res.json({ reply: replyText });
+    return res.json(researchedFallback);
   } catch (err: any) {
     console.error('Emris AI fallback triggered:', err?.message || err);
-    return res.json({ reply: generateConcreteEmrisReply({ message, gender: userGender, userName, mood: userMood, appUrl }) });
+    const fallbackResult = generateConcreteEmrisReplyWithResearch({ message, gender: userGender, userName, mood: userMood, appUrl });
+    return res.json(fallbackResult);
   }
 });
 

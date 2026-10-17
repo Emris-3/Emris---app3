@@ -7,6 +7,9 @@ export interface DrawerChatMessage {
     label: string;
     type?: 'whatsapp' | 'custom';
   };
+  reflection?: string;
+  researchSources?: string[];
+  isResearched?: boolean;
 }
 
 export interface DrawerConversationSession {
