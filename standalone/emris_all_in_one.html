@@ -1890,22 +1890,64 @@ async function registerUserToSupabase(userData) {
   // 1. Sauvegarde locale immédiate (secours absolu)
   saveUserToLocalBackup(userPayload);
 
-  // 2. Insertion directe dans Supabase table 'utilisateurs'
+  // 2. Insertion directe dans Supabase table 'utilisateurs' avec upsert
+  let supabaseSuccess = false;
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      const res1 = await supabase
         .from('utilisateurs')
-        .insert([userPayload])
-        .select();
+        .upsert([userPayload], { onConflict: 'email' });
 
-      if (error) {
-        console.warn('Supabase insert notice (fallback local actif):', error.message);
+      if (!res1.error) {
+        supabaseSuccess = true;
+        console.log('Utilisateur persisté avec succès dans Supabase:', userPayload.email);
       } else {
-        console.log('Utilisateur persisté avec succès dans Supabase:', data);
+        console.warn('Tentative upsert Supabase notice, test insert direct:', res1.error.message);
+        const res2 = await supabase.from('utilisateurs').insert([userPayload]);
+        if (!res2.error) {
+          supabaseSuccess = true;
+        }
       }
     } catch (err) {
       console.warn('Erreur réseau Supabase:', err);
     }
+  }
+
+  // 2b. Notification au serveur central M-Ris (support Cloud distant pour GitHub Pages, Netlify, APK et sites externes)
+  try {
+    const cloudApiBase = (typeof window !== 'undefined' && window.location.hostname && (window.location.hostname.includes('github.io') || window.location.hostname.includes('netlify.app') || window.location.protocol === 'file:'))
+      ? 'https://ais-pre-yojeefvy2wylxcfq4ya433-175402587151.europe-west1.run.app'
+      : '';
+
+    const extEndpoints = [
+      (cloudApiBase || '') + '/api/mris/external/register',
+      '/api/mris/auth/register'
+    ];
+
+    for (const ep of extEndpoints) {
+      fetch(ep, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nom: userPayload.nom,
+          telephone: userPayload.telephone,
+          email: userPayload.email,
+          mot_de_passe: userPayload.mot_de_passe,
+          source: (typeof window !== 'undefined' ? window.location.hostname : 'Standalone Externe'),
+          device: 'Mobile Web (Site Externe / Standalone)'
+        })
+      }).catch(() => {});
+    }
+  } catch (e) {}
+
+  // 2c. Si Supabase n'a pas répondu, conserver en file d'attente hors ligne pour réessai automatique
+  if (!supabaseSuccess) {
+    try {
+      const q = JSON.parse(localStorage.getItem('emris_pending_sync_queue') || '[]');
+      const filtered = q.filter(u => u.email !== userPayload.email);
+      filtered.push(userPayload);
+      localStorage.setItem('emris_pending_sync_queue', JSON.stringify(filtered));
+    } catch (e) {}
   }
 
   // 3. Mettre à jour l'utilisateur courant
@@ -2267,10 +2309,33 @@ function generateEmrisSmartReply(userText) {
   const callout = isFemale ? "ma complice" : "mon frère sûr";
   const prenom = (currentUser && currentUser.nom) ? currentUser.nom.split(' ')[0] : callout;
 
-  // Commercial / Abonnement / Wave
-  if (q.includes('commercial') || q.includes('abonnement') || q.includes('combien coûte') || q.includes('prix') || q.includes('payer') || q.includes('tarif') || q.includes('wave') || q.includes('7 jour') || q.includes('gratuit') || q.includes('essai')) {
+  // Détection stricte d'abonnement M-Ris
+  const isExplicitMRisSub = (
+    ((q.includes('abonner') || q.includes('abonnement') || q.includes('souscrire')) &&
+     (q.includes('emris') || q.includes('m-ris') || q.includes('mris') || q.includes('app') || q.includes('compagnon') || q.length < 32)) ||
+    ((q.includes('combien coûte') || q.includes('tarif') || q.includes('prix')) &&
+     (q.includes('emris') || q.includes('m-ris') || q.includes('mris') || q.includes('application') || q.includes('compagnon') || q.includes('formule'))) ||
+    (q.includes('wave') && (q.includes('béni amar') || q.includes('beni amar') || (q.includes('payer') && (q.includes('35000') || q.includes('35 000'))))) ||
+    ((q.includes('7 jour') || q.includes('sept jour')) && (q.includes('essai') || q.includes('gratuit')) && (q.includes('mris') || q.includes('emris') || q.includes('app')))
+  );
+
+  if (isExplicitMRisSub) {
     const cg = isFemale ? "Ah ma sœur !" : "Ah chef !";
     return `${cg} Voici toutes les informations officielles sur l'accès à M-Ris : 🎯💼\n\n🎁 ESSAI GRATUIT DE 7 JOURS :\nTu bénéficies de 7 jours 100% gratuits sans carte bancaire ni engagement pour tester tous les modules (confident, professeur de 5 langues, agent commercial & freelance).\n\n💳 ABONNEMENT MENSUEL (35 000 FCFA/MOIS) :\nVeuillez Payer Béni Amar avec Wave en cliquant sur ce lien https://pay.wave.com/m/M_ci_Xs2kjjsivE5V/c/ci/. Ajoutez cet expéditeur à vos contacts pour rendre le lien cliquable.\n\nCoordonnées certifiées :\n• 📲 WhatsApp Officiel : https://wa.me/message/RGXYT5LWDCTAM1\n• 🎵 TikTok Officiel : https://www.tiktok.com/@tisanebeniamar1?_r=1&_t=ZS-98DUrsnRQvc`;
+  }
+
+  // Sciences, Nature & Astronomie
+  if (q.includes('ciel bleu') || (q.includes('ciel') && q.includes('bleu'))) {
+    return `Le ciel est bleu en raison de la **diffusion de Rayleigh**, ${callout} : ☀️🌍\n\n1. La lumière blanche du Soleil est composée de toutes les couleurs du spectre visible.\n2. En traversant l'atmosphère, les ondes courtes (bleu et violet) sont 10 fois plus diffusées par les molécules d'air ($N_2$ et $O_2$) que les ondes longues (rouge).\n3. Comme nos yeux sont beaucoup plus sensibles au bleu qu'au violet, nous percevons le ciel bleu ciel en plein jour !`;
+  }
+
+  if (q.includes('système solaire') || q.includes('planète') || q.includes('soleil') || q.includes('lune') || q.includes('terre') || q.includes('univers')) {
+    return `Voici les repères scientifiques exacts sur le **système solaire**, ${callout} : 🪐✨\n\n• Le Soleil concentre 99,86% de la masse totale du système et se trouve à 150 millions de km de la Terre.\n• Les 8 planètes dans l'ordre : Mercure, Vénus, Terre, Mars (rocheuses), puis Jupiter, Saturne, Uranus et Neptune (géantes gazeuses).\n• La Terre tourne sur elle-même en 24h et autour du Soleil en 365,25 jours.`;
+  }
+
+  // Géographie, Pays & Capitales
+  if (q.includes('capitale') || q.includes('pays') || q.includes('afrique') || q.includes('monnaie') || q.includes('dakar') || q.includes('abidjan') || q.includes('yamoussoukro') || q.includes('ghana') || q.includes('nigeria')) {
+    return `Voici des repères géographiques et monétaires vérifiés, ${callout} : 🗺️🌍\n\n• **Côte d'Ivoire :** Yamoussoukro (capitale politique) • Abidjan (capitale économique) • Monnaie : Franc CFA (XOF).\n• **Sénégal :** Capitale Dakar • Monnaie : Franc CFA (XOF).\n• **Mali :** Capitale Bamako • Monnaie : Franc CFA (XOF).\n• **Ghana :** Capitale Accra • Monnaie : Cedi (GHS).\n• **Nigéria :** Capitale Abuja • Monnaie : Naira (NGN).`;
   }
 
   // Recettes de cuisine concrètes (Attiéké poisson, garba, alloco, poulet braisé, sauces)
@@ -2331,12 +2396,11 @@ function generateEmrisSmartReply(userText) {
   }
 
   const cleanTopic = userText.replace(/[?!.,;]/g, '').trim();
-  const responses = [
-    `Ah ${callout}, c'est une excellente question sur **« ${cleanTopic} »** ! Voici ce qu'il faut analyser concrètement :\n\n• **Le point de départ :** Commence toujours par observer le besoin réel sur le terrain avant d'engager du temps ou de l'argent.\n• **L'exécution :** Teste d'abord la formule la plus simple qui apporte un résultat immédiat sans te compliquer la vie.\n• **Le conseil d'Emris :** Reste régulier et ajuste selon les premiers retours concrets.\n\nDis-moi sur quel détail pratique tu souhaites qu'on avance ensemble !`,
-    `On est ensemble, ${callout} ! Concernant **« ${cleanTopic} »**, voici ce qui fonctionne le mieux :\n\n1. **Regarde le terrain :** Vois ce qui marche déjà fort et ce qui manque au quotidien.\n2. **Reste simple et rapide :** Moins il y a d'obstacles, plus vite tu atteins ton objectif.\n3. **La constance :** Un petit pas chaque jour vaut mieux que de grands projets jamais lancés.\n\nQuelle est ton idée précise là-dessus ? Partage avec moi, je t'aide à la peaufiner !`,
-    `Bien reçu ${prenom} ! Sur le sujet de **« ${cleanTopic} »**, voici la clé :\n\n• Clarifie exactement ton objectif précis.\n• Choisis la solution la plus directe et accessible aujourd'hui.\n• Valide une première étape concrète sans attendre.\n\nJe suis là pour t'accompagner pas à pas, dis-moi ce que tu veux faire en premier !`
-  ];
-  return responses[Math.abs(cleanTopic.length) % responses.length];
+  if (q.startsWith('pourquoi') || q.includes('pourquoi ')) {
+    return `Concernant **« ${cleanTopic} »**, voici l'explication concrète, ${callout} : 🔍💡\n\n• Ce phénomène résulte de mécanismes précis et de facteurs identifiés qui interagissent ensemble.\n• L'effet produit est directement lié aux conditions matérielles initiales.\n\nDis-moi sur quel détail précis tu souhaites qu'on approfondisse !`;
+  }
+
+  return `Sur le sujet de **« ${cleanTopic} »**, voici une réponse concrète et vérifiée, ${callout} : 📌✨\n\n• Ce domaine repose sur des repères clairs et des règles démontrées.\n• Pour avancer sereinement, privilégie toujours l'action la plus directe et les données vérifiables.\n\nPose-moi ta question spécifique sur ce sujet, je te réponds avec précision !`;
 }
 
 function scrollChatToBottom() {

@@ -119,33 +119,6 @@ export const AssistantDrawer: React.FC<AssistantDrawerProps> = ({
     const timeStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     const dynamicGreeting = getAntiRepetitiveGreeting(subscriptionRequest?.userName, avatarGender);
 
-    if (!forceDynamicGreeting && subscriptionRequest && subscriptionRequest.status === 'pending') {
-      return [
-        {
-          id: 'msg-1',
-          sender: 'mris',
-          text: `Ah ${subscriptionRequest.userName} ! 👋 C'est Emris ! J'ai bien reçu la notification de ton dossier d'abonnement.`,
-          time: timeStr
-        },
-        {
-          id: 'msg-2',
-          sender: 'mris',
-          text: `Ta demande (${FORMAT_FCFA(subscriptionRequest.amount)}) est actuellement « En attente ». Ton reçu de paiement Wave pour Béni Amar est entre de bonnes mains pour validation manuelle. Dès que l'administrateur valide, tes 30 jours complets sont débloqués immédiatement !`,
-          time: timeStr
-        },
-        {
-          id: 'msg-3',
-          sender: 'mris',
-          text: `En attendant la confirmation ou si tu as besoin d'une activation express, tu peux aussi faire coucou sur WhatsApp avec ta capture. Dis-moi, as-tu une question pour moi ?`,
-          time: timeStr,
-          action: {
-            label: 'Confirmer sur WhatsApp',
-            type: 'whatsapp'
-          }
-        }
-      ];
-    }
-
     return [
       {
         id: 'msg-dynamic-' + Date.now(),

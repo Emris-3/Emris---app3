@@ -340,16 +340,32 @@ export function getInitialRegisteredUsers(): RegisteredUser[] {
 
 export function loadRegisteredUsers(): RegisteredUser[] {
   try {
+    let current: RegisteredUser[] = [];
     const raw = localStorage.getItem(STORAGE_KEYS.REGISTERED_USERS);
-    if (!raw) {
-      return [];
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) current = parsed;
+      } catch {
+        current = [];
+      }
     }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    
-    // Filtrer les comptes supprimés explicitement
+
+    // Récupérer et fusionner tous les comptes historiques passés découverts
+    const harvested = harvestAllHistoricalAccounts();
+    const merged = mergeRegisteredUsers(current, harvested);
+
+    // Si de nouveaux comptes ont été découverts lors de la récupération, mettre à jour le stockage
+    if (merged.length > current.length) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.REGISTERED_USERS, JSON.stringify(merged));
+      } catch {
+        // ignore
+      }
+    }
+
     const deletedKeys = getExplicitlyDeletedUserKeys();
-    return parsed.filter(u => !deletedKeys.has(u.id) && !deletedKeys.has(u.userEmail?.trim().toLowerCase()));
+    return merged.filter(u => !deletedKeys.has(u.id) && !deletedKeys.has(u.userEmail?.trim().toLowerCase()));
   } catch {
     return [];
   }
@@ -372,6 +388,149 @@ export function saveRegisteredUsers(users: RegisteredUser[], force: boolean = fa
   } catch (err) {
     console.error('Failed to save registered users', err);
   }
+}
+
+// =========================================================================
+// HISTORICAL ACCOUNT HARVESTER (RÉCUPÉRATEUR HISTORIQUE MULTI-CLÉS)
+// Récupère automatiquement les comptes de toutes les versions précédentes :
+// v1, v2, v3, v4, v5, local_users_backup, standalone, sessions et abonnements
+// =========================================================================
+
+export function harvestAllHistoricalAccounts(): RegisteredUser[] {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return [];
+  }
+
+  const deletedKeys = getExplicitlyDeletedUserKeys();
+  const recoveredMap = new Map<string, RegisteredUser>();
+
+  const candidateKeys = [
+    'mris_registered_users_v5',
+    'mris_registered_users_v4',
+    'mris_registered_users_v3',
+    'mris_registered_users_v2',
+    'mris_registered_users_v1',
+    'mris_registered_users',
+    'mris_users',
+    'mris_all_users_archive',
+    'emris_local_users_backup',
+    'emris_current_user',
+    'mris_standalone_user',
+    'mris_user_session',
+    'mris_user_session_v5',
+    'mris_pending_users_queue'
+  ];
+
+  const now = new Date().toISOString();
+
+  // 1. Scanner chaque clé candidate
+  for (const key of candidateKeys) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+      for (const item of items) {
+        if (!item) continue;
+        const rawEmail = item.userEmail || item.email || item.toEmail || item.user_email;
+        if (!rawEmail || typeof rawEmail !== 'string') continue;
+        const emailLower = rawEmail.trim().toLowerCase();
+        if (!emailLower.includes('@')) continue;
+
+        if (deletedKeys.has(item.id) || deletedKeys.has(emailLower)) {
+          continue;
+        }
+
+        const rawName = item.userName || item.nom || item.name || item.toName || item.user_name || emailLower.split('@')[0];
+        const rawPhone = item.userPhone || item.telephone || item.phone || item.user_phone || '+225 07 00 00 00 00';
+        const rawPassword = item.password || item.mot_de_passe || item.motDePasse || '';
+        const isOwner = emailLower === 'camaraesther920@gmail.com';
+
+        const user: RegisteredUser = {
+          id: String(item.id || ('usr-recov-' + Date.now() + '-' + Math.floor(Math.random() * 1000))),
+          userName: String(rawName).trim(),
+          userEmail: emailLower,
+          userPhone: String(rawPhone).trim(),
+          password: String(rawPassword),
+          role: isOwner ? 'admin' : (item.role || 'client'),
+          accountStatus: isOwner ? 'validated' : (item.accountStatus || item.account_status || 'pending'),
+          registeredAt: item.registeredAt || item.registered_at || item.created_at || now,
+          lastLoginAt: item.lastLoginAt || item.last_login_at || now,
+          loginCount: Number(item.loginCount || item.login_count || 1),
+          device: item.device || 'Récupération Historique LocalStorage',
+          subscriptionPlan: isOwner ? 'Propriétaire & Administrateur' : (item.subscriptionPlan || item.subscription_plan || item.planName || 'Essai Gratuit 7 Jours'),
+          subscriptionStatus: isOwner ? 'active' : (item.subscriptionStatus || item.subscription_status || 'trial'),
+          paymentStatus: item.paymentStatus || item.payment_status || 'none',
+          totalPaidFCFA: Number(item.totalPaidFCFA || item.total_paid_fcfa || 0),
+          isOnline: true,
+          notes: item.notes || (isOwner ? 'Compte administratrice Esther' : 'Compte historique récupéré')
+        };
+
+        if (!recoveredMap.has(emailLower)) {
+          recoveredMap.set(emailLower, user);
+        } else {
+          // Fusionner en conservant les données les plus complètes
+          const existing = recoveredMap.get(emailLower)!;
+          recoveredMap.set(emailLower, {
+            ...existing,
+            ...user,
+            id: existing.id || user.id,
+            userName: existing.userName || user.userName,
+            userPhone: (existing.userPhone && !existing.userPhone.includes('00 00 00 00')) ? existing.userPhone : user.userPhone,
+            password: existing.password || user.password,
+            accountStatus: (existing.accountStatus === 'validated' || user.accountStatus === 'validated') ? 'validated' : 'pending'
+          });
+        }
+      }
+    } catch {
+      // Ignorer les erreurs de parsing individuelles
+    }
+  }
+
+  // 2. Extraire également les utilisateurs des demandes d'abonnements et essais gratuits existants
+  const subKeys = ['mris_subscriptions_v5', 'mris_subscriptions_v4', 'mris_subscriptions'];
+  for (const sKey of subKeys) {
+    try {
+      const rawSubs = localStorage.getItem(sKey);
+      if (!rawSubs) continue;
+      const parsedSubs = JSON.parse(rawSubs);
+      if (Array.isArray(parsedSubs)) {
+        for (const s of parsedSubs) {
+          if (!s || !s.userEmail) continue;
+          const emailLower = String(s.userEmail).trim().toLowerCase();
+          if (!emailLower.includes('@') || deletedKeys.has(emailLower)) continue;
+
+          const isOwner = emailLower === 'camaraesther920@gmail.com';
+          if (!recoveredMap.has(emailLower)) {
+            recoveredMap.set(emailLower, {
+              id: 'usr-sub-' + (s.id || Date.now()),
+              userName: s.userName || emailLower.split('@')[0],
+              userEmail: emailLower,
+              userPhone: s.userPhone || '+225 07 00 00 00 00',
+              password: '',
+              role: isOwner ? 'admin' : 'client',
+              accountStatus: (isOwner || s.status === 'active') ? 'validated' : 'pending',
+              registeredAt: s.submissionDate || now,
+              lastLoginAt: s.submissionDate || now,
+              loginCount: 1,
+              device: 'Formulaire Abonnement / Essai',
+              subscriptionPlan: isOwner ? 'Propriétaire & Administrateur' : (s.planName || (s.isTrial ? 'Essai Gratuit 7 Jours' : 'Abonnement 30 Jours')),
+              subscriptionStatus: s.isTrial ? 'trial' : (s.status === 'active' ? 'active' : 'trial'),
+              paymentStatus: s.status === 'active' ? 'paid' : (s.waveTransactionId ? 'pending' : 'none'),
+              totalPaidFCFA: s.status === 'active' ? (s.amount || 35000) : 0,
+              isOnline: true,
+              notes: 'Compte extrait d\'une demande d\'abonnement'
+            });
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return Array.from(recoveredMap.values());
 }
 
 export function getInitialUserLoginEvents(): UserLoginEvent[] {

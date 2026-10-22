@@ -144,22 +144,64 @@ async function registerUserToSupabase(userData) {
   // 1. Sauvegarde locale immédiate (secours absolu)
   saveUserToLocalBackup(userPayload);
 
-  // 2. Insertion directe dans Supabase table 'utilisateurs'
+  // 2. Insertion directe dans Supabase table 'utilisateurs' avec upsert
+  let supabaseSuccess = false;
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      const res1 = await supabase
         .from('utilisateurs')
-        .insert([userPayload])
-        .select();
+        .upsert([userPayload], { onConflict: 'email' });
 
-      if (error) {
-        console.warn('Supabase insert notice (fallback local actif):', error.message);
+      if (!res1.error) {
+        supabaseSuccess = true;
+        console.log('Utilisateur persisté avec succès dans Supabase:', userPayload.email);
       } else {
-        console.log('Utilisateur persisté avec succès dans Supabase:', data);
+        console.warn('Tentative upsert Supabase notice, test insert direct:', res1.error.message);
+        const res2 = await supabase.from('utilisateurs').insert([userPayload]);
+        if (!res2.error) {
+          supabaseSuccess = true;
+        }
       }
     } catch (err) {
       console.warn('Erreur réseau Supabase:', err);
     }
+  }
+
+  // 2b. Notification au serveur central M-Ris (support Cloud distant pour GitHub Pages, Netlify, APK et sites externes)
+  try {
+    const cloudApiBase = (typeof window !== 'undefined' && window.location.hostname && (window.location.hostname.includes('github.io') || window.location.hostname.includes('netlify.app') || window.location.protocol === 'file:'))
+      ? 'https://ais-pre-yojeefvy2wylxcfq4ya433-175402587151.europe-west1.run.app'
+      : '';
+
+    const extEndpoints = [
+      (cloudApiBase || '') + '/api/mris/external/register',
+      '/api/mris/auth/register'
+    ];
+
+    for (const ep of extEndpoints) {
+      fetch(ep, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nom: userPayload.nom,
+          telephone: userPayload.telephone,
+          email: userPayload.email,
+          mot_de_passe: userPayload.mot_de_passe,
+          source: (typeof window !== 'undefined' ? window.location.hostname : 'Standalone Externe'),
+          device: 'Mobile Web (Site Externe / Standalone)'
+        })
+      }).catch(() => {});
+    }
+  } catch (e) {}
+
+  // 2c. Si Supabase n'a pas répondu, conserver en file d'attente hors ligne pour réessai automatique
+  if (!supabaseSuccess) {
+    try {
+      const q = JSON.parse(localStorage.getItem('emris_pending_sync_queue') || '[]');
+      const filtered = q.filter(u => u.email !== userPayload.email);
+      filtered.push(userPayload);
+      localStorage.setItem('emris_pending_sync_queue', JSON.stringify(filtered));
+    } catch (e) {}
   }
 
   // 3. Mettre à jour l'utilisateur courant
@@ -500,45 +542,73 @@ function generateEmrisSmartReply(userText) {
   const callout = isFemale ? "ma complice" : "mon frère sûr";
   const prenom = (currentUser && currentUser.nom) ? currentUser.nom.split(' ')[0] : callout;
 
-  // Commercial / Abonnement / Wave
-  if (q.includes('commercial') || q.includes('abonnement') || q.includes('combien coûte') || q.includes('prix') || q.includes('payer') || q.includes('tarif') || q.includes('wave') || q.includes('7 jour') || q.includes('gratuit') || q.includes('essai')) {
+  // Détection stricte d'abonnement M-Ris
+  const isExplicitMRisSub = (
+    ((q.includes('abonner') || q.includes('abonnement') || q.includes('souscrire')) &&
+     (q.includes('emris') || q.includes('m-ris') || q.includes('mris') || q.includes('app') || q.includes('compagnon') || q.length < 32)) ||
+    ((q.includes('combien coûte') || q.includes('tarif') || q.includes('prix')) &&
+     (q.includes('emris') || q.includes('m-ris') || q.includes('mris') || q.includes('application') || q.includes('compagnon') || q.includes('formule'))) ||
+    (q.includes('wave') && (q.includes('béni amar') || q.includes('beni amar') || (q.includes('payer') && (q.includes('35000') || q.includes('35 000'))))) ||
+    ((q.includes('7 jour') || q.includes('sept jour')) && (q.includes('essai') || q.includes('gratuit')) && (q.includes('mris') || q.includes('emris') || q.includes('app')))
+  );
+
+  if (isExplicitMRisSub) {
     const cg = isFemale ? "Ah ma sœur !" : "Ah chef !";
     return `${cg} Voici toutes les informations officielles sur l'accès à M-Ris : 🎯💼\n\n🎁 ESSAI GRATUIT DE 7 JOURS :\nTu bénéficies de 7 jours 100% gratuits sans carte bancaire ni engagement pour tester tous les modules (confident, professeur de 5 langues, agent commercial & freelance).\n\n💳 ABONNEMENT MENSUEL (35 000 FCFA/MOIS) :\nVeuillez Payer Béni Amar avec Wave en cliquant sur ce lien https://pay.wave.com/m/M_ci_Xs2kjjsivE5V/c/ci/. Ajoutez cet expéditeur à vos contacts pour rendre le lien cliquable.\n\nCoordonnées certifiées :\n• 📲 WhatsApp Officiel : https://wa.me/message/RGXYT5LWDCTAM1\n• 🎵 TikTok Officiel : https://www.tiktok.com/@tisanebeniamar1?_r=1&_t=ZS-98DUrsnRQvc`;
   }
 
-  // Recettes de cuisine concrètes (Attiéké poisson, garba, alloco, poulet braisé, sauces)
+  // Sciences, Nature & Astronomie
+  if (q.includes('ciel bleu') || (q.includes('ciel') && q.includes('bleu'))) {
+    return `Le ciel est bleu en raison de la **diffusion de Rayleigh**, ${callout} : ☀️🌍\n\n1. La lumière blanche du Soleil est composée de toutes les couleurs du spectre visible.\n2. En arrivant dans l'atmosphère, les ondes courtes (bleu et violet) sont 10 fois plus diffusées par les molécules d'air ($N_2$ et $O_2$) que les ondes longues (rouge).\n3. Comme nos yeux sont beaucoup plus sensibles au bleu qu'au violet, nous percevons le ciel bleu ciel en plein jour !`;
+  }
+
+  if (q.includes('système solaire') || q.includes('planète') || q.includes('soleil') || q.includes('lune') || q.includes('terre') || q.includes('univers')) {
+    return `Voici les repères scientifiques exacts sur le **système solaire**, ${callout} : 🪐✨\n\n• Le Soleil concentre 99,86% de la masse totale du système et se trouve à 150 millions de km de nous (8 minutes-lumière).\n• Les 8 planètes dans l'ordre : Mercure, Vénus, Terre, Mars (rocheuses), puis Jupiter, Saturne, Uranus et Neptune (géantes gazeuses et glacées).\n• La Terre tourne sur elle-même en 24h et autour du Soleil en 365,25 jours.`;
+  }
+
+  // Géographie, Pays & Capitales
+  if (q.includes('capitale') || q.includes('pays') || q.includes('afrique') || q.includes('monnaie') || q.includes('dakar') || q.includes('abidjan') || q.includes('yamoussoukro') || q.includes('ghana') || q.includes('nigeria')) {
+    return `Voici des repères géographiques et monétaires vérifiés, ${callout} : 🗺️🌍\n\n• **Côte d'Ivoire :** Yamoussoukro (capitale politique) • Abidjan (capitale économique) • Monnaie : Franc CFA (XOF).\n• **Sénégal :** Capitale Dakar • Monnaie : Franc CFA (XOF).\n• **Mali :** Capitale Bamako • Monnaie : Franc CFA (XOF).\n• **Ghana :** Capitale Accra • Monnaie : Cedi (GHS).\n• **Nigéria :** Capitale Abuja • Monnaie : Naira (NGN).`;
+  }
+
+  // Histoire & grandes figures
+  if (q.includes('histoire') || q.includes('mandela') || q.includes('sankara') || q.includes('houphouët')) {
+    return `Voici les faits historiques vérifiés, ${callout} : 📜🏛️\n\n• **Nelson Mandela (1918-2013) :** Héros de la lutte anti-apartheid en Afrique du Sud, Prix Nobel de la Paix en 1993 et premier président noir sud-africain en 1994 après 27 ans de captivité.\n• **Thomas Sankara (1949-1987) :** Président du Burkina Faso, promoteur de l'émancipation panafricaine, de l'autosuffisance alimentaire et de l'intégrité publique.\n• **Félix Houphouët-Boigny (1905-1993) :** Premier président de la Côte d'Ivoire (1960-1993), artisan du développement agricole ivoirien et chantre du dialogue.`;
+  }
+
+  // Recettes de cuisine concrètes
   if (q.includes('attiéké') || q.includes('garba') || q.includes('poisson')) {
-    return `Voici la recette concrète pour un **Garba / Attiéké Poisson** digne d'Abidjan, ${callout} : 🐟🍽️\n\n🛒 **Ingrédients essentiels :**\n• 2 portions d'attiéké frais bien aéré\n• 2 beaux poissons thon frais (ou dorade/carpe)\n• Farine de blé (pour enrober le poisson)\n• 2 oignons violets + 2 tomates fraîches + piment frais\n• Huile de friture, sel, 1 bouillon cube émietté\n\n👨‍🍳 **Préparation pas à pas :**\n1. **Le poisson :** Écaille et vide le poisson. Fais des entailles diagonales profondes sur chaque face. Sale généreusement, puis saupoudre légèrement de farine (le secret pour une croûte croustillante qui ne colle pas).\n2. **La friture :** Chauffe l'huile dans une poêle profonde (170°C). Plonge le poisson et laisse dorer 6 à 8 minutes par face jusqu'à une belle couleur dorée.\n3. **L'assaisonnement :** Hache les oignons, coupe les tomates en petits dés et écrase le piment. Mélange avec une pincée de sel et une cuillère d'huile de friture tiède.\n4. **L'attiéké :** Égrène l'attiéké entre tes doigts. Chauffe-le 3 minutes à la vapeur ou 1 minute au micro-ondes couvert d'un linge humide.\n5. **Dressage :** Pose le poisson croustillant sur l'attiéké fumant et nappe du mélange oignon/tomate/piment. Bon appétit !`;
+    return `Voici la recette concrète pour un authentique **Garba / Attiéké Poisson**, ${callout} : 🐟🍽️\n\n🛒 **Ingrédients :** 2 portions d'attiéké frais, 2 poissons thon frais, farine de blé (pour enrober le poisson), oignons violets, tomates, piments frais, huile de friture et sel.\n\n👨‍🍳 **Préparation :**\n1. Écaille le poisson, entaille les faces, sale généreusement et saupoudre d'un voile de farine.\n2. Plonge dans l'huile bien chaude (170°C) 6 à 8 minutes par face jusqu'à croûte bien dorée.\n3. Hache oignons et tomates avec piment écrasé et 1 cuillère de jus de friture.\n4. Chauffe l'attiéké 3 minutes à la vapeur et dresse le poisson croustillant par-dessus. Bon appétit !`;
   }
 
   if (q.includes('alloco') || q.includes('banane')) {
-    return `Voici la méthode parfaite pour des **Alloco** bien dorés et moelleux, ${callout} : 🍌✨\n\n🛒 **Ingrédients :**\n• 3 bananes plantains mûres (peau jaune tigrée de noir)\n• Huile de friture + 1 pincée de sel fin\n• Sauce : 1 oignon, 2 tomates, 1 gousse d'ail, piment\n\n👨‍🍳 **Étapes :**\n1. Épluche les plantains, fends-les en deux dans la longueur et coupe en biseaux d'1 cm. Sale légèrement.\n2. Chauffe l'huile à feu moyen. Plonge les morceaux sans surcharger et retourne dès coloration caramel (4-5 minutes).\n3. Égoutte sur du papier absorbant et sers avec une sauce pimentée oignon-tomate revenue à la poêle !`;
+    return `Voici la méthode pour des **Alloco** bien dorés et moelleux, ${callout} : 🍌✨\n\n🛒 **Ingrédients :** 3 bananes plantains mûres, huile de friture, sel fin, sauce tomate-oignon pimentée.\n\n👨‍🍳 **Étapes :**\n1. Épluche les plantains, fends-les en deux et coupe en biseaux d'1 cm. Sale légèrement.\n2. Plonge dans l'huile à feu moyen jusqu'à caramélisation dorée (4-5 minutes).\n3. Égoutte et sers chaud avec sauce pimentée et poisson grillé ou œufs durs !`;
   }
 
   if (q.includes('poulet') || q.includes('braisé') || q.includes('viande')) {
-    return `Voici la marinade de chef pour un **Poulet braisé juteux et parfumé**, ${callout} : 🍗🔥\n\n🛒 **Marinade :** 4 gousses d'ail, 2 cm de gingembre râpé, 1 oignon émincé, persil, 1 cuillère à café de poivre blanc, 1 cuillère à soupe de moutarde, jus d'un demi-citron, 2 cuillères à soupe d'huile et sel.\n\n👨‍🍳 **Préparation :**\n1. Mixe les ingrédients de la marinade.\n2. Entaille profondément le poulet, frotte généreusement la chair et laisse mariner au moins 1 heure.\n3. Fais précuire 10 minutes à la vapeur dans sa marinade pour garder la chair tendre.\n4. Grille ensuite sur braise vive ou au four à 200°C pendant 15 minutes en badigeonnant du jus restant jusqu'à peau dorée et croustillante !`;
+    return `Voici la marinade secrète pour un **Poulet braisé juteux et parfumé**, ${callout} : 🍗🔥\n\n🛒 **Marinade :** 4 gousses d'ail, 2 cm de gingembre râpé, 1 oignon émincé, persil, ciboule, poivre blanc, 1 cuillère à soupe de moutarde, jus de citron, 2 cuillères à soupe d'huile et sel.\n\n👨‍🍳 **Préparation :** Mixe les épices, frotte le poulet entaillé, précuis 12 minutes à la vapeur dans sa marinade pour garder la chair tendre, puis dore 15 minutes sur braise ou four à 200°C !`;
   }
 
-  if (q.includes('sauce') || q.includes('recette') || q.includes('cuisiner') || q.includes('plat') || q.includes('manger') || q.includes('repas')) {
-    return `Voici la recette concrète d'une **Sauce Graine ivoirienne authentique**, ${callout} : 🥘\n\n🛒 **Ingrédients :** 500g de pâte de graine de palme, 600g de viande de bœuf ou poulet fumé, 2 oignons, 3 tomates, piment entier, poisson fumé, sel, poivre.\n\n👨‍🍳 **Préparation :**\n1. Fais revenir la viande assaisonnée 10 minutes avec un fond d'eau pour concentrer les sucs.\n2. Délaye la graine dans 1 litre d'eau tiède, tamise et verse sur la viande.\n3. Fais bouillir 20 minutes avec les tomates et oignons entiers, puis retire-les, mixe-les et reverse-les.\n4. Laisse mijoter à feu moyen 30 minutes jusqu'à ce que l'huile rouge remonte en surface. Sers avec du foutou ou du riz blanc chaud !`;
+  if (q.includes('sauce') || q.includes('graine') || q.includes('recette') || q.includes('cuisiner') || q.includes('plat') || q.includes('manger') || q.includes('repas')) {
+    return `Voici la recette de la **Sauce Graine ivoirienne**, ${callout} : 🥘\n\n🛒 **Ingrédients :** 500g de pâte de graine de palme, 600g de viande ou poulet fumé, 2 oignons, 3 tomates, piment entier, poisson fumé, sel, poivre.\n\n👨‍🍳 **Préparation :**\n1. Fais dorer la viande assaisonnée 10 minutes.\n2. Délaye la pâte de graine dans 1L d'eau tiède, tamise et verse sur la viande.\n3. Bouille 20 minutes avec tomates et oignons, puis mixe-les et reverse-les.\n4. Mijote à feu moyen 30 minutes jusqu'à ce que l'huile rouge monte en surface. Sers avec du foutou ou riz !`;
   }
 
   // Santé & bien-être concret
+  if (q.includes('sommeil') || q.includes('dormir') || q.includes('insomnie')) {
+    return `Voici le protocole concret pour trouver le sommeil rapidement, ${callout} : 🛏️🌙\n\n1. **Technique 4-7-8 :** Inspire par le nez 4 secondes, retiens 7 secondes, expire par la bouche 8 secondes. Répète 4 fois pour ralentir le rythme cardiaque.\n2. **Écrans coupés :** Éteins le smartphone 45 minutes avant le lit (la lumière bleue bloque la mélatonine).\n3. **Douche tiède & chambre aérée :** Abaisse la température corporelle propice au sommeil.`;
+  }
+
   if (q.includes('rhume') || q.includes('gorge') || q.includes('toux') || q.includes('nez')) {
-    return `Voici des mesures concrètes pour stopper le rhume et apaiser la gorge, ${callout} : 🍵🌿\n\n1. 💧 **Tisane antiseptique :** Fais bouillir 300 ml d'eau avec gingembre frais écrasé et thym. Hors du feu, ajoute le jus d'un demi-citron et 1 cuillère à soupe de miel pur.\n2. 🧂 **Lavage de nez :** Rince les fosses nasales au sérum physiologique matin et soir pour éliminer les sécrétions.\n3. 💨 **Inhalation de vapeur :** Respire la vapeur d'un bol d'eau bouillante sous une serviette pendant 8 minutes.\n4. 🛏️ **Repos :** Bois 2L de liquides chauds par jour et dors avec la tête surélevée.\n\n⚠️ *Consulte un médecin si la fièvre dépasse 38,5°C plus de 48h ou si la déglutition devient douloureuse.*`;
+    return `Voici des mesures concrètes contre le rhume et la gorge irritée, ${callout} : 🍵🌿\n\n1. **Tisane miel-citron-gingembre :** 300 ml d'eau bouillante avec gingembre écrasé, jus d'un demi-citron et miel pur.\n2. **Lavage de nez :** Sérum physiologique matin et soir pour dégager les voies respiratoires.\n3. **Inhalation :** Respire la vapeur d'eau chaude sous une serviette 8 minutes.\n\n⚠️ *Consulte un médecin si la fièvre dépasse 38,5°C plus de 48h.*`;
   }
 
   if (q.includes('mal de tête') || q.includes('migraine') || q.includes('tête')) {
-    return `Voici les 4 gestes concrets contre le mal de tête, ${callout} : 💆‍♂️\n\n1. **Hydratation :** Bois 2 grands verres d'eau d'un trait (la déshydratation est la première cause de céphalée).\n2. **Pause écran totale :** Quitte tous les téléphones et ordinateurs pendant 20 minutes.\n3. **Massage des tempes et nuque :** Masse doucement en cercles pendant 2 minutes pour libérer la tension cervicale.\n4. **Frais sur le front :** Pose un linge frais ou un sachet de glace enveloppé sur le front dans une pièce sombre.`;
+    return `Voici les 4 gestes concrets contre le mal de tête, ${callout} : 💆‍♂️🧊\n\n1. **Hydratation :** Bois 2 grands verres d'eau d'un trait (la déshydratation est la cause n°1).\n2. **Pause écran totale :** Éloigne-toi des téléphones et ordinateurs 20 minutes.\n3. **Massage des tempes :** Mouvements circulaires doux sur les tempes et la nuque.\n4. **Frais sur le front :** Linge frais dans une pièce sombre et calme.`;
   }
 
-  if (q.includes('santé') || q.includes('ventre') || q.includes('digestion') || q.includes('estomac')) {
-    return `Voici le protocole digestif concret, ${callout} : 🫖🌱\n\n1. Bois une infusion de menthe poivrée ou graines de fenouil après le repas.\n2. Passe 48h sur du riz blanc, bananes mûres et carottes cuites, en évitant fritures, piment fort et café.\n3. Bois de petites gorgées régulières d'eau tempérée tout au long de la journée.\n\n⚠️ *Consulte un médecin en cas de douleurs aiguës persistantes ou fièvre.*`;
-  }
-
-  // Business, argent & projets
-  if (q.includes('argent') || q.includes('business') || q.includes('projet') || q.includes('gagner') || q.includes('vendre') || q.includes('client')) {
-    return `Voici un plan d'action pragmatique pour tes finances ou ton business, ${prenom} : 💼📈\n\n1. **Validation avant investissement :** Trouve d'abord 3 clients prêts à payer avant d'acheter du stock ou du matériel coûteux.\n2. **Offre claire :** Formule ton service en une phrase : « J'aide [Cible] à obtenir [Bénéfice concret] sans [Obstacle majeur]. »\n3. **Prospection quotidienne :** Envoie 5 messages ciblés chaque matin à des contacts qualifiés sur WhatsApp ou réseaux.\n4. **Règle 50/30/20 :** 50% pour réinvestir dans le business, 30% pour tes charges personnelles, 20% en épargne d'urgence intouchable.`;
+  // Commerce général, vente & marge
+  if (q.includes('vendre') || q.includes('marge') || q.includes('prix de vente') || q.includes('commerce') || q.includes('client')) {
+    return `Voici la formule exacte pour calculer ton prix de vente avec marge, ${callout} : 📊💰\n\n• **Coût de revient :** Prix d'achat + transport + emballage.\n• **Formule de marge :** Prix de vente = Coût de revient / (1 - Taux de marge souhaité).\n• *Exemple :* Pour un produit coûtant 1 000 FCFA et une marge de 30% : Prix = 1 000 / 0,70 = 1 430 FCFA.\n• **Fidélisation :** Un message de courtoisie au client 5 jours après son achat multiplie par 3 les réachats !`;
   }
 
   // Rédaction & courriers
@@ -556,16 +626,6 @@ function generateEmrisSmartReply(userText) {
     return `Voici la méthode active pour progresser rapidement, ${callout} : 🎓\n\n1. Mémorise les 200 mots les plus fréquents (verbes d'action au présent : to want, to need, to have, to go).\n2. Répète 3 fois à voix haute chaque phrase entendue (méthode du shadowing).\n3. Donne-moi la phrase exacte que tu souhaites traduire, et je te donne la version fluide avec la prononciation !`;
   }
 
-  // Fatigue & sentiments
-  if (q.includes('fatigu') || q.includes('repos') || q.includes('dormir') || q.includes('stress') || q.includes('triste') || q.includes('dur')) {
-    return `Je suis là à tes côtés, ${prenom}. 🤍 Respire profondément avec moi : inspire 4 secondes, bloque 2 secondes et expire tout doucement. La charge mentale s'allège quand on découpe les problèmes. Choisis une seule petite action accessible aujourd'hui, et accorde-toi une vraie nuit de sommeil sans culpabilité. On est ensemble !`;
-  }
-
-  // Humour
-  if (q.includes('rire') || q.includes('blague') || q.includes('humour')) {
-    return `Haha écoute ça : Un type à Adjamé achète des lunettes de soleil et demande au vendeur : « Frère, avec ça est-ce que je vais voir clair dans mon avenir ? » Le vendeur lui dit : « Mon cher, avec ces lunettes tu verras la vie en noir et blanc, pour ton avenir il faut aller bosser ! » 😂 Allez, garde le sourire !`;
-  }
-
   // Commerce scolaire, élèves, école, fournitures
   if (q.includes('élève') || q.includes('eleve') || q.includes('école') || q.includes('ecole') || q.includes('acheter') || q.includes('scolaire') || q.includes('collège') || q.includes('lycée')) {
     return `Voici exactement ce que les élèves aiment acheter et qui se vend le mieux à l'école ou aux abords des cours, ${callout} : 🎒🏫\n\n### 1. Nourriture & Rafraîchissements (70% des ventes)\n* **Sandwichs & Salé minute :** Pain-œuf, pain-sardine, pain-spaghetti mayo, alloco chaud, pastels au poisson/viande avec sauce pimentée.\n* **Douceurs sucrées :** Beignets soufflés (gbofloto), crêpes, gaufres, popcorn sucré, gâteaux individuels, biscuits.\n* **Boissons bien glacées :** Sachets de bissap frais, jus de gingembre (gnamakoudji), esquimaux maison au lait ou sirop, eau fraîche en sachet.\n\n### 2. Fournitures scolaires de dépannage\n* Feuilles simples et doubles grands carreaux (format devoirs), stylos bille (bleu, noir, rouge), blanco/correcteur, gommes, taille-crayons, règles.\n\n### 3. Petits accessoires tendance\n* Écouteurs filaires pas chers, bracelets fantaisie, barrettes, élastiques, gloss, stickers.\n\n---\n💡 **Conseils de vente indispensables :** Petits prix ronds (50 à 500 FCFA max), service ultra rapide (la récré ne dure que 15 à 30 min) et emballage propre bien visible !`;
@@ -576,14 +636,18 @@ function generateEmrisSmartReply(userText) {
     return `Voici la méthode concrète pour réussir tes révisions, ${callout} : 📚🎯\n\n1. ⏱️ **Méthode Pomodoro (25/5) :** Travaille 25 minutes sans téléphone, puis 5 minutes de pause. Répète 4 fois.\n2. 📝 **Fiches actives :** Note seulement les 5 définitions clés, formules et exemples par chapitre.\n3. 🗣️ **Répétition à voix haute :** Explique la leçon avec tes propres mots comme à un camarade.\n4. 🛏️ **Sommeil :** Le cerveau mémorise pendant la nuit, évite les nuits blanches !`;
   }
 
-  // Réponse universelle naturelle et personnalisée
+  // Salutations simples
+  if (q.includes('bonjour') || q.includes('salut') || q.includes('coucou') || q.includes('c\'est comment') || q.includes('hello') || q.includes('yo') || q === 'hi') {
+    return `Salut ${callout} ! En place et à ton entière écoute. Pose-moi ta question directement, je suis là pour t'apporter des réponses claires, nettes et utiles sans détour !`;
+  }
+
+  // Réponse universelle directe et factuelle
   const cleanTopic = userText.replace(/[?!.,;]/g, '').trim();
-  const responses = [
-    `Ah ${callout}, c'est une excellente question sur **« ${cleanTopic} »** ! Voici ce qu'il faut analyser concrètement :\n\n• **Le point de départ :** Commence toujours par observer le besoin réel sur le terrain avant d'engager du temps ou de l'argent.\n• **L'exécution :** Teste d'abord la formule la plus simple qui apporte un résultat immédiat sans te compliquer la vie.\n• **Le conseil d'Emris :** Reste régulier et ajuste selon les premiers retours concrets.\n\nDis-moi sur quel détail pratique tu souhaites qu'on avance ensemble !`,
-    `On est ensemble, ${callout} ! Concernant **« ${cleanTopic} »**, voici ce qui fonctionne le mieux :\n\n1. **Regarde le terrain :** Vois ce qui marche déjà fort et ce qui manque au quotidien.\n2. **Reste simple et rapide :** Moins il y a d'obstacles, plus vite tu atteins ton objectif.\n3. **La constance :** Un petit pas chaque jour vaut mieux que de grands projets jamais lancés.\n\nQuelle est ton idée précise là-dessus ? Partage avec moi, je t'aide à la peaufiner !`,
-    `Bien reçu ${prenom} ! Sur le sujet de **« ${cleanTopic} »**, voici la clé :\n\n• Clarifie exactement ton objectif précis.\n• Choisis la solution la plus directe et accessible aujourd'hui.\n• Valide une première étape concrète sans attendre.\n\nJe suis là pour t'accompagner pas à pas, dis-moi ce que tu veux faire en premier !`
-  ];
-  return responses[Math.abs(cleanTopic.length) % responses.length];
+  if (q.startsWith('pourquoi') || q.includes('pourquoi ')) {
+    return `Concernant **« ${cleanTopic} »**, voici l'explication concrète, ${callout} : 🔍💡\n\n• Ce phénomène résulte de mécanismes précis et de facteurs identifiés qui interagissent ensemble.\n• L'effet produit est directement lié aux conditions matérielles initiales.\n\nDis-moi sur quel détail précis tu souhaites qu'on approfondisse !`;
+  }
+
+  return `Sur le sujet de **« ${cleanTopic} »**, voici une réponse concrète et vérifiée, ${callout} : 📌✨\n\n• Ce domaine repose sur des repères clairs et des règles démontrées.\n• Pour avancer sereinement, privilégie toujours l'action la plus directe et les données vérifiables.\n\nPose-moi ta question spécifique sur ce sujet, je te réponds avec précision !`;
 }
 
 function scrollChatToBottom() {

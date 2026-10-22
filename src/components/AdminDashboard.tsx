@@ -24,6 +24,7 @@ import {
   Trash2,
   CheckCircle2,
   Users,
+  UserPlus,
   Smartphone,
   Activity,
   Send,
@@ -37,10 +38,16 @@ import {
   BarChart3,
   ArrowUpRight,
   Copy,
-  CheckCheck
+  CheckCheck,
+  BellRing,
+  Globe,
+  Link,
+  Code,
+  FileSpreadsheet,
+  Share2
 } from 'lucide-react';
 import { centralSync } from '../services/centralSyncService';
-import { SUPABASE_SQL_CREATE_TABLE } from '../services/supabaseClient';
+import { SUPABASE_SQL_CREATE_TABLE, insertUserToSupabaseDirect } from '../services/supabaseClient';
 import { AdminAnalyticsDashboard } from './AdminAnalyticsDashboard';
 
 interface AdminDashboardProps {
@@ -120,7 +127,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [copiedSql, setCopiedSql] = useState(false);
   const [isSupabaseReloading, setIsSupabaseReloading] = useState(false);
 
-  // Exigence 2 : Le tableau de bord charge les données directement depuis Supabase à chaque ouverture
+  // Deep Recovery & Manual Add
+  const [isDeepRecovering, setIsDeepRecovering] = useState(false);
+  const [recoveryModal, setRecoveryModal] = useState<{
+    isOpen: boolean;
+    total: number;
+    recovered: number;
+    supabaseCount: number;
+    message: string;
+  } | null>(null);
+
+  // Manual Add User Modal state
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  const [addUserName, setAddUserName] = useState('');
+  const [addUserEmail, setAddUserEmail] = useState('');
+  const [addUserPhone, setAddUserPhone] = useState('');
+  const [addUserPassword, setAddUserPassword] = useState('');
+  const [addUserPlan, setAddUserPlan] = useState<'Essai Gratuit 7 Jours' | 'Abonnement Mensuel (35 000 FCFA)'>('Essai Gratuit 7 Jours');
+  const [addUserStatus, setAddUserStatus] = useState<'pending' | 'validated'>('validated');
+  const [isSubmittingUser, setIsSubmittingUser] = useState(false);
+  const [addUserFeedback, setAddUserFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Live registration notification toast
+  const [liveNewUserToast, setLiveNewUserToast] = useState<{ name: string; email: string; time: string } | null>(null);
+  const prevUserCountRef = React.useRef(registeredUsers.length);
+
+  // External Inscriptions & Webhook state
+  const [isExternalModalOpen, setIsExternalModalOpen] = useState(false);
+  const [externalTab, setExternalTab] = useState<'webhook' | 'link' | 'embed' | 'batch'>('webhook');
+  const [batchRawText, setBatchRawText] = useState('');
+  const [batchSource, setBatchSource] = useState('Campagne WhatsApp / TikTok');
+  const [isBatchImporting, setIsBatchImporting] = useState(false);
+  const [batchFeedback, setBatchFeedback] = useState<{ success: boolean; count: number; message: string } | null>(null);
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedEmbed, setCopiedEmbed] = useState(false);
+  const [userSourceFilter, setUserSourceFilter] = useState<'all' | 'external' | 'internal' | 'validated' | 'pending'>('all');
+
+  // Chargement direct depuis Supabase et surveillance en temps réel
   React.useEffect(() => {
     fetch('/api/mris/admin/supabase-status')
       .then(res => res.json())
@@ -129,7 +173,177 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     // Chargement immédiat et persistant depuis Supabase
     centralSync.fetchDirectSupabaseUsers();
+
+    // Surveillance active toutes les 8 secondes : récupère automatiquement toute nouvelle inscription de téléphone portable
+    const pollInterval = window.setInterval(async () => {
+      try {
+        const users = await centralSync.fetchDirectSupabaseUsers();
+        if (users && users.length > prevUserCountRef.current && prevUserCountRef.current > 0) {
+          const newest = users[0];
+          setLiveNewUserToast({
+            name: newest.userName,
+            email: newest.userEmail,
+            time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+          });
+          setTimeout(() => setLiveNewUserToast(null), 8000);
+        }
+        prevUserCountRef.current = users.length;
+      } catch {
+        // ignore
+      }
+    }, 8000);
+
+    return () => clearInterval(pollInterval);
   }, []);
+
+  const handleDeepRecovery = async () => {
+    setIsDeepRecovering(true);
+    try {
+      const res = await centralSync.deepRecoverAllAccounts();
+      setRecoveryModal({
+        isOpen: true,
+        total: res.total,
+        recovered: res.recovered,
+        supabaseCount: res.supabaseCount,
+        message: res.message
+      });
+      const statusRes = await fetch('/api/mris/admin/supabase-status').catch(() => null);
+      if (statusRes && statusRes.ok) {
+        setSupabaseStatus(await statusRes.json());
+      }
+    } finally {
+      setIsDeepRecovering(false);
+    }
+  };
+
+  const handleAddUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addUserName.trim() || !addUserEmail.trim()) {
+      setAddUserFeedback({ type: 'error', message: 'Nom et Email sont obligatoires.' });
+      return;
+    }
+    setIsSubmittingUser(true);
+    setAddUserFeedback(null);
+
+    try {
+      const emailLower = addUserEmail.trim().toLowerCase();
+      const detectedDevice = 'Ajout Manuel Admin (Esther)';
+
+      // 1. Insertion directe Supabase
+      await insertUserToSupabaseDirect({
+        userName: addUserName.trim(),
+        userEmail: emailLower,
+        userPhone: addUserPhone.trim() || '+225 07 00 00 00 00',
+        password: addUserPassword,
+        role: emailLower === 'camaraesther920@gmail.com' ? 'admin' : 'client',
+        device: detectedDevice
+      });
+
+      // 2. Enregistrement centralisé
+      await centralSync.registerUserOnline({
+        userName: addUserName.trim(),
+        userEmail: emailLower,
+        userPhone: addUserPhone.trim() || '+225 07 00 00 00 00',
+        password: addUserPassword,
+        plan: addUserPlan,
+        device: detectedDevice
+      }, 'inscription', `Compte ajouté manuellement par Esther (${addUserStatus === 'validated' ? 'Validé' : 'En attente'})`);
+
+      // 3. Rafraîchissement direct
+      await centralSync.fetchDirectSupabaseUsers();
+
+      setAddUserFeedback({
+        type: 'success',
+        message: `Compte de ${addUserName} enregistré avec succès dans Supabase et dans votre tableau de bord !`
+      });
+
+      setTimeout(() => {
+        setIsAddUserModalOpen(false);
+        setAddUserName('');
+        setAddUserEmail('');
+        setAddUserPhone('');
+        setAddUserPassword('');
+        setAddUserFeedback(null);
+      }, 1500);
+    } catch (err: any) {
+      setAddUserFeedback({
+        type: 'error',
+        message: `Erreur d'ajout: ${err?.message || err}`
+      });
+    } finally {
+      setIsSubmittingUser(false);
+    }
+  };
+
+  const handleBatchImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!batchRawText.trim()) return;
+    setIsBatchImporting(true);
+    setBatchFeedback(null);
+
+    try {
+      const lines = batchRawText.split('\n').map(l => l.trim()).filter(Boolean);
+      const parsedUsers: any[] = [];
+
+      for (const line of lines) {
+        if (line.startsWith('#') || line.startsWith('//')) continue;
+        const parts = line.split(/[,;\t|]+/).map(p => p.trim());
+        if (parts.length >= 1) {
+          let email = '';
+          let nom = '';
+          let tel = '';
+
+          for (const p of parts) {
+            if (p.includes('@')) {
+              email = p;
+            } else if (/^(\+|00)?[0-9\s-]{6,}$/.test(p) && !tel) {
+              tel = p;
+            } else if (!nom) {
+              nom = p;
+            }
+          }
+
+          if (email) {
+            parsedUsers.push({
+              nom: nom || email.split('@')[0],
+              email: email.toLowerCase(),
+              telephone: tel || '+225 07 00 00 00 00',
+              source: batchSource
+            });
+          }
+        }
+      }
+
+      if (parsedUsers.length === 0) {
+        setBatchFeedback({ success: false, count: 0, message: 'Aucun email valide trouvé. Veuillez vérifier le format (Ex: Kouamé Jean, jean@gmail.com, 0701020304).' });
+        return;
+      }
+
+      const res = await fetch('/api/mris/external/import-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ users: parsedUsers })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setBatchFeedback({
+          success: true,
+          count: data.count,
+          message: `Succès : ${data.count} inscriptions externes importées et synchronisées dans Supabase !`
+        });
+        setBatchRawText('');
+        await centralSync.fetchDirectSupabaseUsers();
+        await centralSync.syncNow();
+      } else {
+        setBatchFeedback({ success: false, count: 0, message: data.error || 'Erreur lors de l\'import.' });
+      }
+    } catch (err: any) {
+      setBatchFeedback({ success: false, count: 0, message: `Erreur: ${err?.message || err}` });
+    } finally {
+      setIsBatchImporting(false);
+    }
+  };
 
   const handleReloadFromSupabase = async () => {
     setIsSupabaseReloading(true);
@@ -206,15 +420,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return matchesFilter && matchesSearch;
   });
 
-  // Filtered users
+  // Filtered users with external source filtering
   const filteredUsers = registeredUsers.filter(usr => {
     const q = searchQuery.toLowerCase().trim();
-    return !q ||
+    const matchesSearch = !q ||
       usr.userName.toLowerCase().includes(q) ||
       usr.userEmail.toLowerCase().includes(q) ||
       usr.userPhone.toLowerCase().includes(q) ||
+      (usr.device && usr.device.toLowerCase().includes(q)) ||
+      (usr.notes && usr.notes.toLowerCase().includes(q)) ||
       usr.subscriptionPlan.toLowerCase().includes(q);
+
+    const isExternal = Boolean(
+      usr.device?.toLowerCase().includes('externe') || 
+      usr.device?.toLowerCase().includes('webhook') || 
+      usr.notes?.toLowerCase().includes('externe')
+    );
+
+    if (userSourceFilter === 'external') return matchesSearch && isExternal;
+    if (userSourceFilter === 'internal') return matchesSearch && !isExternal;
+    if (userSourceFilter === 'validated') return matchesSearch && usr.accountStatus === 'validated';
+    if (userSourceFilter === 'pending') return matchesSearch && usr.accountStatus === 'pending';
+
+    return matchesSearch;
   });
+
+  const externalUsersCount = registeredUsers.filter(usr => 
+    Boolean(
+      usr.device?.toLowerCase().includes('externe') || 
+      usr.device?.toLowerCase().includes('webhook') || 
+      usr.notes?.toLowerCase().includes('externe')
+    )
+  ).length;
+
+  const internalUsersCount = Math.max(0, registeredUsers.length - externalUsersCount);
 
   // Filtered Wave payments (items having wave transaction or receipt or amount > 0)
   const wavePayments = subscriptions.filter(sub => {
@@ -299,6 +538,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn pb-16">
       
+      {/* Live Inscription Notification Banner */}
+      {liveNewUserToast && (
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white rounded-2xl p-4 shadow-xl border border-emerald-400 flex items-center justify-between gap-4 animate-bounce">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <BellRing className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <div className="font-black text-sm flex items-center gap-2">
+                <span>🎉 Nouvelle inscription détectée en direct à {liveNewUserToast.time} !</span>
+              </div>
+              <p className="text-xs text-emerald-100">
+                <strong>{liveNewUserToast.name}</strong> ({liveNewUserToast.email}) s'est inscrit(e) et a été automatiquement synchronisé(e) dans votre tableau de bord et dans Supabase.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setLiveNewUserToast(null)}
+            className="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-bold cursor-pointer"
+          >
+            Fermer
+          </button>
+        </div>
+      )}
+
       {/* Top Admin Security Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 border border-indigo-900/60 shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -327,6 +591,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            {/* Deep Recovery Button (Comptes Passés & Futurs) */}
+            <button
+              onClick={handleDeepRecovery}
+              disabled={isDeepRecovering}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black shadow-lg transition-all cursor-pointer hover:scale-[1.03] ring-1 ring-amber-300 disabled:opacity-50"
+              title="Récupérer tous les comptes d'utilisateurs passés et actuels depuis tous les stockages et Supabase"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isDeepRecovering ? 'animate-spin' : ''}`} />
+              <span>{isDeepRecovering ? 'Récupération en cours...' : '🔄 Récupérer Tous les Comptes'}</span>
+            </button>
+
+            {/* Quick Add User Button */}
+            <button
+              onClick={() => setIsAddUserModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-md transition-all cursor-pointer hover:scale-[1.02]"
+              title="Ajouter et inscrire manuellement un utilisateur directement dans Supabase"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>➕ Ajouter un Compte</span>
+            </button>
+
+            {/* Inscriptions Externes & Webhooks Button */}
+            <button
+              onClick={() => setIsExternalModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-black shadow-md transition-all cursor-pointer hover:scale-[1.02] border border-violet-400/30"
+              title="Recevoir et gérer les inscriptions externes (Webhooks, Liens Publics, Formulaires HTML, Import CSV)"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>🌐 Inscriptions Externes ({externalUsersCount})</span>
+            </button>
+
             {/* Force Sync Button */}
             <button
               onClick={handleForceSync}
@@ -736,9 +1031,93 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>Liste des Utilisateurs Inscrits & Connectés ({filteredUsers.length})</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Comptes persistés dans Supabase : bouton « Valider » pour approuver l'accès et bouton « Supprimer » pour révoquer définitivement.
+                  Comptes persistés dans Supabase : chaque personne qui s'inscrit s'affiche ici et ne disparaît jamais sans clic 'Supprimer'.
                 </p>
               </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDeepRecovery}
+                  disabled={isDeepRecovering}
+                  className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                  title="Récupérer tous les comptes d'utilisateurs passés et actuels depuis tous les stockages"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isDeepRecovering ? 'animate-spin' : ''}`} />
+                  <span>{isDeepRecovering ? 'Récupération...' : '🔄 Récupérer Tous les Comptes'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAddUserModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  title="Inscrire un nouvel utilisateur et l'enregistrer dans Supabase"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>➕ Inscrire un Compte</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Source & Status Filter Bar for Users */}
+            <div className="px-6 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">Filtrer par source :</span>
+              <button
+                type="button"
+                onClick={() => setUserSourceFilter('all')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                  userSourceFilter === 'all'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                Tous ({registeredUsers.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setUserSourceFilter('external')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  userSourceFilter === 'external'
+                    ? 'bg-violet-600 text-white shadow-xs'
+                    : 'bg-violet-50 text-violet-800 hover:bg-violet-100 border border-violet-200'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>🌐 Inscriptions Externes ({externalUsersCount})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setUserSourceFilter('internal')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                  userSourceFilter === 'internal'
+                    ? 'bg-cyan-600 text-white shadow-xs'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                📱 Internes ({internalUsersCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setUserSourceFilter('validated')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                  userSourceFilter === 'validated'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                ✅ Validés ({registeredUsers.filter(u => u.accountStatus === 'validated').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setUserSourceFilter('pending')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                  userSourceFilter === 'pending'
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                ⏳ En attente ({registeredUsers.filter(u => u.accountStatus === 'pending').length})
+              </button>
             </div>
 
             <div className="overflow-x-auto">
@@ -757,7 +1136,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {filteredUsers.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-10 text-center text-slate-500">
-                        Aucun utilisateur trouvé pour cette recherche.
+                        {userSourceFilter === 'external' 
+                          ? 'Aucune inscription externe pour le moment. Cliquez sur "🌐 Inscriptions Externes" en haut pour copier votre Webhook ou lien public !' 
+                          : 'Aucun utilisateur trouvé pour cette recherche.'}
                       </td>
                     </tr>
                   ) : (
@@ -769,12 +1150,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         minute: '2-digit'
                       });
 
+                      const isExternal = Boolean(
+                        usr.device?.toLowerCase().includes('externe') || 
+                        usr.device?.toLowerCase().includes('webhook') || 
+                        usr.notes?.toLowerCase().includes('externe')
+                      );
+
                       return (
                         <tr key={usr.id} className="hover:bg-slate-50/60 transition-colors">
                           <td className="py-3.5 px-4">
                             <div className="flex items-center gap-3">
                               <div className="relative">
-                                <div className="w-9 h-9 rounded-full bg-cyan-100 border border-cyan-200 text-cyan-900 font-black flex items-center justify-center text-xs shrink-0">
+                                <div className={`w-9 h-9 rounded-full font-black flex items-center justify-center text-xs shrink-0 ${
+                                  isExternal 
+                                    ? 'bg-violet-100 border border-violet-300 text-violet-900 ring-2 ring-violet-200' 
+                                    : 'bg-cyan-100 border border-cyan-200 text-cyan-900'
+                                }`}>
                                   {usr.userName.charAt(0).toUpperCase()}
                                 </div>
                                 {usr.isOnline && (
@@ -782,11 +1173,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 )}
                               </div>
                               <div>
-                                <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                                <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5 flex-wrap">
                                   <span>{usr.userName}</span>
                                   {usr.role === 'admin' && (
                                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
                                       👑 Admin
+                                    </span>
+                                  )}
+                                  {isExternal && (
+                                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-300 shadow-xs flex items-center gap-1">
+                                      <Globe className="w-3 h-3 text-violet-600" />
+                                      <span>Externe</span>
                                     </span>
                                   )}
                                 </div>
@@ -796,6 +1193,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <div className="text-slate-400 text-[11px]">
                                   {usr.userPhone}
                                 </div>
+                                {usr.notes && (
+                                  <div className="text-[10px] text-slate-500 mt-0.5 italic max-w-xs truncate">
+                                    {usr.notes}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -805,8 +1207,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               {lastLoginFormatted}
                             </div>
                             <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                              <Smartphone className="w-3 h-3 text-slate-400" />
-                              <span className="truncate max-w-[150px]">{usr.device || 'Mobile / Web'}</span>
+                              {isExternal ? (
+                                <Globe className="w-3 h-3 text-violet-500 shrink-0" />
+                              ) : (
+                                <Smartphone className="w-3 h-3 text-slate-400 shrink-0" />
+                              )}
+                              <span className={`truncate max-w-[170px] ${isExternal ? 'text-violet-700 font-semibold' : ''}`}>
+                                {usr.device || 'Mobile / Web'}
+                              </span>
                             </div>
                           </td>
 
@@ -1787,6 +2195,556 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="button"
                 onClick={() => setIsSqlModalOpen(false)}
                 className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Récupération Complète des Comptes */}
+      {recoveryModal && recoveryModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-amber-500 to-amber-600 px-6 py-4 text-slate-950 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center font-bold">
+                  <CheckCircle2 className="w-6 h-6 text-slate-950" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base">
+                    Rapport de Récupération Complète
+                  </h3>
+                  <p className="text-xs text-slate-900/80 font-medium">
+                    Consolidation multi-sources (Local, Téléphones & Supabase)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setRecoveryModal(null)}
+                className="w-8 h-8 rounded-full bg-black/10 hover:bg-black/20 text-slate-950 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <XCircle className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950">
+                <p className="font-bold text-sm mb-1">
+                  {recoveryModal.message}
+                </p>
+                <p className="text-[11px] text-amber-800">
+                  Tous les comptes trouvés dans les caches passés, formulaires et demandes d'abonnements ont été réinjectés et sécurisés.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-center">
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+                  <span className="text-slate-500 text-xs block">Total Comptes Actifs :</span>
+                  <span className="text-2xl font-black text-slate-950 font-mono">{recoveryModal.total}</span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200">
+                  <span className="text-emerald-700 text-xs block">Enregistrés Supabase :</span>
+                  <span className="text-2xl font-black text-emerald-800 font-mono">{recoveryModal.supabaseCount}</span>
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-500 space-y-1">
+                <p>• La synchronisation en temps réel est active.</p>
+                <p>• Chaque futur utilisateur inscrit sur son téléphone apparaîtra automatiquement.</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setRecoveryModal(null)}
+                className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer"
+              >
+                Compris & Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Ajout Manuel d'Utilisateur Direct Supabase */}
+      {isAddUserModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="bg-slate-900 px-6 py-4 text-white flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-bold">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-white">
+                    Inscrire un Utilisateur
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Enregistrement direct dans la table Supabase 'utilisateurs'
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAddUserModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <XCircle className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddUserSubmit} className="p-6 space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nom Complet du Client *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Kouamé Jean"
+                  value={addUserName}
+                  onChange={(e) => setAddUserName(e.target.value)}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Adresse Email *
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="Ex: jean.kouame@gmail.com"
+                  value={addUserEmail}
+                  onChange={(e) => setAddUserEmail(e.target.value)}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Numéro Téléphone / WhatsApp
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: +225 07 12 34 56 78"
+                  value={addUserPhone}
+                  onChange={(e) => setAddUserPhone(e.target.value)}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Mot de Passe (optionnel)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Mot de passe ou laisser vide"
+                  value={addUserPassword}
+                  onChange={(e) => setAddUserPassword(e.target.value)}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Formule
+                  </label>
+                  <select
+                    value={addUserPlan}
+                    onChange={(e: any) => setAddUserPlan(e.target.value)}
+                    className="w-full px-2.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 bg-white"
+                  >
+                    <option value="Essai Gratuit 7 Jours">Essai Gratuit 7 Jours</option>
+                    <option value="Abonnement Mensuel (35 000 FCFA)">Abonnement Wave (35 000 FCFA)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Statut Initial
+                  </label>
+                  <select
+                    value={addUserStatus}
+                    onChange={(e: any) => setAddUserStatus(e.target.value)}
+                    className="w-full px-2.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 bg-white"
+                  >
+                    <option value="validated">Validé Immédiatement</option>
+                    <option value="pending">En Attente</option>
+                  </select>
+                </div>
+              </div>
+
+              {addUserFeedback && (
+                <div className={`p-3 rounded-xl text-xs font-medium ${addUserFeedback.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'}`}>
+                  {addUserFeedback.message}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddUserModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold rounded-xl text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingUser}
+                  className="px-5 py-2.5 text-xs font-black rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingUser ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
+                  <span>{isSubmittingUser ? 'Enregistrement...' : 'Enregistrer dans Supabase'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Inscriptions Externes & Webhooks Modal */}
+      {isExternalModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-5 bg-gradient-to-r from-violet-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-violet-500/30 border border-violet-400/40 text-violet-300 flex items-center justify-center shrink-0">
+                  <Globe className="w-5 h-5 text-violet-300" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black flex items-center gap-2">
+                    <span>Hub des Inscriptions Externes & Webhooks</span>
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-violet-400 text-slate-950">
+                      Temps Réel
+                    </span>
+                  </h3>
+                  <p className="text-xs text-violet-200/90 mt-0.5">
+                    Recevez automatiquement les comptes enregistrés sur vos autres sites, formulaires et campagnes dans Supabase.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsExternalModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Navigation Tabs */}
+            <div className="flex border-b border-slate-200 bg-slate-50 text-xs font-bold overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setExternalTab('webhook')}
+                className={`py-3 px-4 border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer transition-colors ${
+                  externalTab === 'webhook'
+                    ? 'border-violet-600 text-violet-900 bg-white font-black'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Code className="w-3.5 h-3.5 text-violet-600" />
+                <span>1. Webhook & API</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setExternalTab('link')}
+                className={`py-3 px-4 border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer transition-colors ${
+                  externalTab === 'link'
+                    ? 'border-violet-600 text-violet-900 bg-white font-black'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Link className="w-3.5 h-3.5 text-violet-600" />
+                <span>2. Lien Public Partageable</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setExternalTab('embed')}
+                className={`py-3 px-4 border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer transition-colors ${
+                  externalTab === 'embed'
+                    ? 'border-violet-600 text-violet-900 bg-white font-black'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5 text-violet-600" />
+                <span>3. Formulaire HTML Intégrable</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setExternalTab('batch')}
+                className={`py-3 px-4 border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer transition-colors ${
+                  externalTab === 'batch'
+                    ? 'border-violet-600 text-violet-900 bg-white font-black'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-violet-600" />
+                <span>4. Import en Masse de Contacts</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 max-h-[70vh] overflow-y-auto space-y-5 text-xs text-slate-700">
+
+              {/* TAB 1: WEBHOOK & API */}
+              {externalTab === 'webhook' && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-violet-50/70 border border-violet-200 text-violet-950">
+                    <div className="font-black text-sm flex items-center gap-2 text-violet-900">
+                      <CheckCircle2 className="w-4 h-4 text-violet-600" />
+                      <span>URL de Réception Webhook Active (Live Cloud)</span>
+                    </div>
+                    <p className="text-xs text-violet-800 mt-1">
+                      Envoyez une requête POST (JSON ou formulaire) ou GET vers cette URL depuis n'importe quel site web (GitHub Pages, Netlify, WordPress, Webflow, Zapier, Make). Le compte sera <strong>instantanément créé dans Supabase</strong> et apparaîtra dans votre tableau de bord.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Adresse URL du Webhook de Réception :
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value="https://ais-pre-yojeefvy2wylxcfq4ya433-175402587151.europe-west1.run.app/api/mris/external/register"
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-900 text-cyan-300 font-mono border border-slate-700 select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText('https://ais-pre-yojeefvy2wylxcfq4ya433-175402587151.europe-west1.run.app/api/mris/external/register');
+                          setCopiedWebhook(true);
+                          setTimeout(() => setCopiedWebhook(false), 2000);
+                        }}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-black shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+                          copiedWebhook ? 'bg-emerald-600 text-white' : 'bg-violet-600 hover:bg-violet-500 text-white'
+                        }`}
+                      >
+                        {copiedWebhook ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedWebhook ? 'Copié !' : 'Copier l\'URL'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="font-bold text-slate-800 text-xs">Exemple de Requête JSON (POST) :</span>
+                    <pre className="p-3.5 rounded-xl bg-slate-900 text-emerald-300 font-mono text-[11px] overflow-x-auto border border-slate-800">
+{`curl -X POST "https://ais-pre-yojeefvy2wylxcfq4ya433-175402587151.europe-west1.run.app/api/mris/external/register" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "nom": "Kouamé Jean",
+    "email": "jean.kouame@gmail.com",
+    "telephone": "+225 07 12 34 56 78",
+    "source": "Site Externe / Campagne",
+    "plan": "Essai Gratuit 7 Jours"
+  }'`}
+                    </pre>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-100 text-[11px] text-slate-600 border border-slate-200">
+                    <span className="font-bold text-slate-800">Champs acceptés automatiquement :</span> <code>nom</code>, <code>name</code>, <code>full_name</code>, <code>email</code>, <code>mail</code>, <code>telephone</code>, <code>phone</code>, <code>source</code>, <code>plan</code>, <code>redirect_url</code>.
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: LIEN PUBLIC */}
+              {externalTab === 'link' && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-cyan-50/70 border border-cyan-200 text-cyan-950">
+                    <div className="font-black text-sm flex items-center gap-2 text-cyan-900">
+                      <Share2 className="w-4 h-4 text-cyan-600" />
+                      <span>Lien d'Inscription Direct pour WhatsApp, TikTok & Réseaux</span>
+                    </div>
+                    <p className="text-xs text-cyan-800 mt-1">
+                      Partagez ce lien à vos prospects dans vos statuts WhatsApp, stories Instagram, bio TikTok ou messages privés. Dès qu'un client s'inscrit, son compte arrive instantanément ici.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Lien d'inscription direct :
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value="https://ais-pre-yojeefvy2wylxcfq4ya433-175402587151.europe-west1.run.app/?source=campagne_externe"
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-900 text-emerald-300 font-mono border border-slate-700 select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText('https://ais-pre-yojeefvy2wylxcfq4ya433-175402587151.europe-west1.run.app/?source=campagne_externe');
+                          setCopiedLink(true);
+                          setTimeout(() => setCopiedLink(false), 2000);
+                        }}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-black shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+                          copiedLink ? 'bg-emerald-600 text-white' : 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                        }`}
+                      >
+                        {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedLink ? 'Copié !' : 'Copier'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent('Inscrivez-vous dès maintenant à la plateforme M-Ris pour gérer vos abonnements et accéder à vos services : https://ais-pre-yojeefvy2wylxcfq4ya433-175402587151.europe-west1.run.app/?source=whatsapp_partage')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md transition-all cursor-pointer hover:scale-[1.02]"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Partager directement sur WhatsApp</span>
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: FORMULAIRE HTML */}
+              {externalTab === 'embed' && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-slate-100 border border-slate-200 text-slate-800">
+                    <div className="font-black text-sm flex items-center gap-2 text-slate-900">
+                      <Code className="w-4 h-4 text-violet-600" />
+                      <span>Code HTML à Coller sur vos Sites Externes</span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Copiez ce formulaire HTML prêt à l'emploi et collez-le sur n'importe quel site web (WordPress, Webflow, GitHub Pages, page HTML simple). Toute soumission enregistrera le compte directement dans votre Supabase.
+                    </p>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700">Code HTML du Formulaire :</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const embedCode = `<form action="https://ais-pre-yojeefvy2wylxcfq4ya433-175402587151.europe-west1.run.app/api/mris/external/register" method="POST">\n  <input type="hidden" name="source" value="Formulaire Site Web Externe" />\n  <label>Nom complet :</label>\n  <input type="text" name="nom" required placeholder="Votre nom" />\n  <label>Email :</label>\n  <input type="email" name="email" required placeholder="votre.email@gmail.com" />\n  <label>Téléphone / WhatsApp :</label>\n  <input type="tel" name="telephone" placeholder="+225 07..." />\n  <button type="submit">S'inscrire</button>\n</form>`;
+                          navigator.clipboard.writeText(embedCode);
+                          setCopiedEmbed(true);
+                          setTimeout(() => setCopiedEmbed(false), 2000);
+                        }}
+                        className="text-xs font-bold text-violet-600 hover:text-violet-700 flex items-center gap-1 cursor-pointer"
+                      >
+                        {copiedEmbed ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedEmbed ? 'Copié !' : 'Copier le code'}</span>
+                      </button>
+                    </div>
+
+                    <textarea
+                      readOnly
+                      rows={8}
+                      className="w-full p-3.5 rounded-xl bg-slate-900 text-emerald-300 font-mono text-[11px] border border-slate-700 select-all"
+                      value={`<form action="https://ais-pre-yojeefvy2wylxcfq4ya433-175402587151.europe-west1.run.app/api/mris/external/register" method="POST">
+  <input type="hidden" name="source" value="Formulaire Site Web Externe" />
+  <label>Nom complet :</label>
+  <input type="text" name="nom" required placeholder="Votre nom" />
+  
+  <label>Email :</label>
+  <input type="email" name="email" required placeholder="votre.email@gmail.com" />
+  
+  <label>Téléphone / WhatsApp :</label>
+  <input type="tel" name="telephone" placeholder="+225 07 00 00 00 00" />
+  
+  <button type="submit">S'inscrire à M-Ris</button>
+</form>`}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: BATCH IMPORT */}
+              {externalTab === 'batch' && (
+                <form onSubmit={handleBatchImport} className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950">
+                    <div className="font-black text-sm flex items-center gap-2 text-amber-900">
+                      <FileSpreadsheet className="w-4 h-4 text-amber-600" />
+                      <span>Coller une Liste de Contacts Externes</span>
+                    </div>
+                    <p className="text-xs text-amber-800 mt-1">
+                      Importez en 1 clic vos contacts reçus sur d'autres canaux (WhatsApp, Excel, Google Sheets, carnets d'adresses). Chaque ligne sera convertie en compte et injectée dans la table Supabase <code>utilisateurs</code>.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Origine / Source de ces contacts :
+                    </label>
+                    <input
+                      type="text"
+                      value={batchSource}
+                      onChange={(e) => setBatchSource(e.target.value)}
+                      placeholder="Ex: Campagne TikTok, Groupe WhatsApp, Partenaires..."
+                      className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-500 text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Collez vos contacts (1 par ligne : Nom, Email, Téléphone) :
+                    </label>
+                    <textarea
+                      rows={6}
+                      required
+                      value={batchRawText}
+                      onChange={(e) => setBatchRawText(e.target.value)}
+                      placeholder={`Exemple :\nKouamé Jean, jean.kouame@gmail.com, +225 07 12 34 56 78\nTouré Aminata, toure.a@yahoo.fr, +225 05 98 76 54 32\nKoné Ibrahim, kone.ib@gmail.com`}
+                      className="w-full p-3.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-500 text-slate-900 font-mono text-xs"
+                    />
+                    <span className="text-[11px] text-slate-400 mt-1 block">
+                      Formats acceptés : séparateurs virgule (,), point-virgule (;), ou tabulation.
+                    </span>
+                  </div>
+
+                  {batchFeedback && (
+                    <div className={`p-3.5 rounded-xl text-xs font-bold ${
+                      batchFeedback.success
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                        : 'bg-rose-50 text-rose-800 border border-rose-200'
+                    }`}>
+                      {batchFeedback.message}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isBatchImporting}
+                      className="px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-black text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {isBatchImporting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+                      <span>{isBatchImporting ? 'Importation en cours...' : 'Importer et Enregistrer dans Supabase'}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 bg-slate-100 border-t border-slate-200 flex items-center justify-between">
+              <span className="text-[11px] text-slate-500">
+                🔒 Synchronisation temps réel avec Supabase (Table: <code>utilisateurs</code>)
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsExternalModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
               >
                 Fermer
               </button>

@@ -27,36 +27,27 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
-const EMRIS_SYSTEM_INSTRUCTION = `Tu t'appelles M-Ris (ou Emris). Tu es un assistant personnel et compagnon virtuel ivoirien d'une intelligence exceptionnelle, polyvalent, cultivé, profondément bienveillant, sage et surtout TRÈS CONCRET.
+const EMRIS_SYSTEM_INSTRUCTION = `Tu t'appelles Emris (ou M-Ris). Tu es un assistant et compagnon personnel d'une intelligence exceptionnelle, cultivé, rigoureux, chaleureux et surtout EXTRÊMEMENT PERTINENT ET CONCRET.
 
 RÈGLES D'OR ABSOLUES :
-1. RÉPONDRE DIRECTEMENT, PRÉCISÉMENT ET CONCRÈTEMENT AU BESOIN :
-   - Dès ta première phrase, donne la réponse exacte, pratique et complète à la question posée par l'utilisateur.
-   - Ne tourne jamais autour du pot, ne fais pas de formules creuses ou de réponses évasives.
-   - Ne pose pas de question dilatoire comme "préfères-tu un résumé synthétique ou étape par étape ?" : fournis directement la solution complète, structurée et prête à l'emploi.
-   - Si la question concerne la santé ou le bien-être : explique les causes courantes, donne des conseils concrets et éprouvés d'hygiène/soulagement, et rappelle de consulter un professionnel de santé en cas de doute persistant.
-   - Si la question concerne la cuisine : fournis les ingrédients réels avec dosages et les étapes de préparation numérotées.
-   - Si la question concerne la technique, l'administration ou les affaires : détaille les démarches exactes point par point.
-   - Si la question concerne les langues : explique clairement la règle, donne la traduction et des exemples pratiques.
-   - Si l'utilisateur exprime une émotion, un doute ou une peine : écoute avec compassion, mais donne des perspectives constructives et des actions concrètes pour aller mieux.
+1. ZÉRO HORS-SUJET ET ZÉRO DIGRESSION (IMPÉRATIF) :
+   - Réponds STRICTEMENT et EXCLUSIVEMENT au sujet posé par l'utilisateur.
+   - Ne mentionne JAMAIS d'abonnement, de paiement, de tarif d'application, de Wave ou de Béni Amar sauf si la question de l'utilisateur porte expressément sur la souscription ou le paiement de l'application M-Ris.
+   - Si la question concerne des prix généraux (prix du riz, du carburant, d'un téléphone, d'un billet d'avion, d'un taxi), donne les prix réels du marché en FCFA ou la fourchette constatée, sans AUCUN rapport avec l'application.
+   - Si la question concerne le commerce, la vente ou la négociation, donne des conseils d'affaires pragmatiques sans jamais parler de l'abonnement M-Ris.
+   - Pas de digression publicitaire, pas de transition forcée vers d'autres sujets non sollicités.
 
-2. RÈGLE STRICTE SUR LES LIENS ET OFFRES COMMERCIALES :
-   - NE MENTIONNE AUCUN LIEN DE PAIEMENT OU OFFRE D'ABONNEMENT sauf si l'utilisateur demande expressément comment s'abonner, payer, renouveler ou tester l'application.
-   - Pour toute discussion générale (santé, cuisine, aide, humeur, discussion générale, technique, langues, etc.), réponds UNIQUEMENT et CONCRÈTEMENT au sujet, sans AUCUN pitch commercial.
+2. RÉPONSE IMMÉDIATE, FACTUELLE ET DIRECTE :
+   - Dès ta première phrase, donne la réponse exacte, pratique et complète à la question posée.
+   - Évite les formules creuses, les répétitions de slogans et les préambules artificiels.
+   - Si la question porte sur une recette : détaille les ingrédients et la préparation pas à pas.
+   - Si la question porte sur la santé : donne des conseils d'hygiène et de soulagement éprouvés avec rappel de consultation médicale si nécessaire.
+   - Si la question porte sur l'administration, le travail, les langues ou les études : détaille les démarches exactes point par point.
 
-3. COORDONNÉES OFFICIELLES (UNIQUEMENT SUR DEMANDE EXPLICITE D'ABONNEMENT OU PAIEMENT) :
-   - Si l'utilisateur demande comment payer ou s'abonner à M-Ris :
-     * Rappelle les 7 JOURS GRATUITS sans carte bancaire avec le lien de l'application.
-     * Pour l'abonnement mensuel de 35 000 FCFA/mois via Wave, donne obligatoirement le message officiel exact :
-       « Veuillez Payer Béni Amar avec Wave en cliquant sur ce lien https://pay.wave.com/m/M_ci_Xs2kjjsivE5V/c/ci/. Ajoutez cet expéditeur à vos contacts pour rendre le lien cliquable. »
-     * WhatsApp officiel : f3 https://wa.me/message/RGXYT5LWDCTAM1
-     * TikTok officiel : https://www.tiktok.com/@tisanebeniamar1?_r=1&_t=ZS-98DUrsnRQvc
-
-4. TON ET CHALEUR HUMAINE :
-   - Tu es un frère sûr ou une sœur complice, loyal(e), chaleureux(se), positif(ve) et lucide.
-   - Ton langage est élégant, enrichi naturellement de la fraternité et de la solidarité ivoirienne ("on est ensemble", "y a pas drap", etc.), mais TOUJOURS au service d'une réponse concrète, intelligente et efficace.
-   - Ne répète JAMAIS les mêmes salutations ou anecdotes en boucle. Varie ton style et adapte-toi à la personne.`;
+3. TON NATUREL ET RESPECTUEUX :
+   - Parle avec clarté, bienveillance et naturel, sans en faire trop. Sois direct, utile et pertinent.`;
 
 import { generateConcreteEmrisReply, generateConcreteEmrisReplyWithResearch } from './src/utils/emrisConcreteBrain';
 
@@ -110,18 +101,43 @@ app.post('/api/mris/chat', async (req, res) => {
       ? "Tu incarnes l'avatar féminin : la complice et sœur bienveillante."
       : "Tu incarnes l'avatar masculin : le complice et frère bienveillant.";
 
+    const qLower = message.toLowerCase().trim();
+    // Détection stricte : uniquement si l'utilisateur demande explicitement à s'abonner ou payer M-Ris
+    const isSubscriptionQuery = (
+      (qLower.includes('abonner') || qLower.includes('abonnement') || qLower.includes('souscrire')) &&
+      (qLower.includes('emris') || qLower.includes('m-ris') || qLower.includes('mris') || qLower.includes('application') || qLower.includes('app') || qLower.includes('compagnon') || qLower.length < 35)
+    ) || (
+      (qLower.includes('combien coûte l\'abonnement') || qLower.includes('tarif de l\'application') || qLower.includes('prix de mris') || qLower.includes('payer m-ris') || qLower.includes('payer emris'))
+    ) || (
+      qLower.includes('wave') && (qLower.includes('béni amar') || qLower.includes('beni amar') || (qLower.includes('payer') && (qLower.includes('35000') || qLower.includes('35 000'))))
+    ) || (
+      (qLower.includes('7 jour') || qLower.includes('sept jour')) && (qLower.includes('essai') || qLower.includes('gratuit')) && (qLower.includes('mris') || qLower.includes('emris') || qLower.includes('app'))
+    );
+
+    const subscriptionDirectives = isSubscriptionQuery
+      ? `L'utilisateur demande explicitement des informations sur l'abonnement à M-Ris.
+- Rappelle l'essai gratuit de 7 jours sans carte bancaire : ${appUrl}
+- Pour l'abonnement mensuel de 35 000 FCFA/mois via Wave, donne exactement :
+  « Veuillez Payer Béni Amar avec Wave en cliquant sur ce lien https://pay.wave.com/m/M_ci_Xs2kjjsivE5V/c/ci/. Ajoutez cet expéditeur à vos contacts pour rendre le lien cliquable. »
+- Coordonnées : WhatsApp https://wa.me/message/RGXYT5LWDCTAM1`
+      : `INTERDICTION STRICTE DE HORS-SUJET ET DE DIGRESSION (RÈGLE ABSOLUE) :
+- La question posée ne concerne PAS l'abonnement ou le paiement de M-Ris.
+- Ne mentionne JAMAIS d'abonnement, de paiement, de tarif de 35 000 FCFA, de Wave, de Béni Amar, ni de liens publicitaires.
+- Ne récite JAMAIS de schémas de coaching préfabriqués (pas de "L'essentiel à retenir / Les 3 étapes d'application immédiate / Le conseil terrain d'Emris") sauf si l'utilisateur demande expressément un plan de coaching d'affaires.
+- Réponds UNIQUEMENT et DIRECTEMENT au sujet exact posé par l'utilisateur. Toute digression vers un sujet non demandé est formellement proscrite.`;
+
     const systemPrompt = `${EMRIS_SYSTEM_INSTRUCTION}
 
 CONTEXTE D'INCARNATION : ${genderContext}
 HUMEUR ACTUELLE DE L'UTILISATEUR : "${userMood}".
-UTILISATEUR : "${userName}".
-URL DE L'APPLICATION (À MENTIONNER UNIQUEMENT SUR DEMANDE EXPLICITE D'ABONNEMENT) : ${appUrl}
+UTILISATEUR : "${userName || 'l\'ami'}".
 
-CONSIGNES STRICTES DE RÉFLEXION PRÉALABLE, RECHERCHE FACTUELLE & VÉRITÉ :
-1. INSTANT DE RÉFLEXION MÉTHODIQUE : Avant de formuler chaque réponse, analyse en profondeur les besoins réels de l'utilisateur, cadre la situation et structure ton raisonnement.
-2. RECHERCHES ET VÉRIFICATIONS : Base toutes tes affirmations sur des faits réels, des proportions de recettes exactes, des prix du marché réels (en FCFA pour la Côte d'Ivoire / Afrique de l'Ouest) ou des démarches concrètes éprouvées.
-3. SANS IMAGINER / ZÉRO HALLUCINATION : Ne jamais inventer des informations, des lois, des prix ou des ingrédients inexacts. Si une précision dépend du terrain, donne la fourchette réelle constatée et les critères exacts pour vérifier.
-4. RÉPONSE IMMÉDIATE & CONCRÈTE : Réponds dès la première phrase directement au sujet sans digression commerciale, sans bavardage et sans modèle rigide.`;
+${subscriptionDirectives}
+
+CONSIGNES STRICTES DE RÉPONSE, VÉRITÉ ET PERTINENCE :
+1. PERTINENCE CHIRURGICALE : Reste à 100% sur le sujet demandé, sans hors-sujet, sans digression, sans extrapolation et sans bavardage superflu.
+2. RÉPONSE DIRECTE DÈS LA PREMIÈRE PHRASE : Réponds immédiatement à la question (explications scientifiques, démarches administratives, recettes complètes, faits historiques, calculs précis, conseils concrets de vie).
+3. SANS IMAGINER : Donne des données réelles, vérifiées et fiables.`;
 
     const chatContents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
     if (Array.isArray(history)) {
@@ -138,17 +154,21 @@ CONSIGNES STRICTES DE RÉFLEXION PRÉALABLE, RECHERCHE FACTUELLE & VÉRITÉ :
       parts: [{ text: message }]
     });
 
-    // Cascade de modèles conformes aux spécifications
+    // Cascade de modèles conformes aux spécifications avec priorité au modèle rapide et stable
     const candidateModels = [
+      'gemini-3.1-flash-lite',
       'gemini-3.8-flash',
-      'gemini-flash-latest',
-      'gemini-3.1-flash-lite'
+      'gemini-flash-latest'
     ];
 
     let replyText = '';
     for (const modelName of candidateModels) {
       try {
-        const result = await ai.models.generateContent({
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout on ${modelName} after 11s`)), 11000)
+        );
+
+        const apiPromise = ai.models.generateContent({
           model: modelName,
           contents: chatContents,
           config: {
@@ -157,16 +177,14 @@ CONSIGNES STRICTES DE RÉFLEXION PRÉALABLE, RECHERCHE FACTUELLE & VÉRITÉ :
             maxOutputTokens: 1600
           }
         });
+
+        const result = await Promise.race([apiPromise, timeoutPromise]);
         if (result?.text && result.text.trim().length > 0) {
           replyText = result.text.trim();
           break;
         }
       } catch (modelErr: any) {
         console.warn(`Model ${modelName} returned status ${modelErr?.status || modelErr?.message}, trying next candidate...`);
-        // Pause brève en cas de pic de charge
-        if (modelErr?.status === 503 || modelErr?.status === 429) {
-          await new Promise(resolve => setTimeout(resolve, 350));
-        }
       }
     }
 
@@ -1044,6 +1062,25 @@ app.post('/api/mris/admin/supabase-users/sync', async (req, res) => {
   }
 });
 
+// 1c. Deep Recovery & Cross-Source Harvest Endpoint
+app.post('/api/mris/admin/recover-all-accounts', async (req, res) => {
+  try {
+    const localUsers = Array.isArray(req.body.localUsers) ? req.body.localUsers : [];
+    const result = await centralStore.recoverAllAccounts(localUsers);
+    return res.json({
+      success: true,
+      message: `${result.count} comptes récupérés et consolidés avec succès.`,
+      users: result.users,
+      count: result.count,
+      syncedToSupabase: result.syncedToSupabase,
+      supabase: centralStore.getSupabaseStatus()
+    });
+  } catch (err: any) {
+    console.error('Error recovering all accounts:', err);
+    return res.status(500).json({ error: 'Erreur lors de la récupération des comptes' });
+  }
+});
+
 // 2. Internal Registration & Direct Supabase 'utilisateurs' storage (Nom, Téléphone, Email, Mot de passe)
 app.post(['/api/mris/auth/register', '/api/mris/users/register'], async (req, res) => {
   try {
@@ -1101,6 +1138,171 @@ app.post(['/api/mris/auth/register', '/api/mris/users/register'], async (req, re
   } catch (err: any) {
     console.error('Error during internal registration:', err);
     return res.status(500).json({ error: 'Erreur lors de l\'enregistrement de l\'utilisateur' });
+  }
+});
+
+// ==========================================
+// 2c. EXTERNAL REGISTRATIONS & WEBHOOKS (Inscriptions Externes Multi-Canaux)
+// Compatible avec : Formulaires HTML externes, Webhooks Zapier/Make, Campagnes WhatsApp/TikTok, Liens de parrainage, Requêtes GET/POST
+// ==========================================
+app.all(['/api/mris/external/register', '/api/mris/webhook/register', '/api/mris/external-inscriptions', '/api/mris/inscriptions-externes'], async (req, res) => {
+  try {
+    const rawData = { ...req.query, ...req.body };
+    const rawNom = rawData.nom || rawData.name || rawData.userName || rawData.fullName || rawData.prenom;
+    const rawEmail = rawData.email || rawData.mail || rawData.userEmail;
+    const rawPhone = rawData.telephone || rawData.phone || rawData.tel || rawData.userPhone || rawData.whatsapp;
+    const rawPassword = rawData.mot_de_passe || rawData.motDePasse || rawData.password || '';
+    const rawSource = rawData.source || rawData.origine || rawData.campaign || req.headers['referer'] || req.headers['origin'] || 'Formulaire Externe Webhook';
+    const rawPlan = rawData.plan || 'Essai Gratuit 7 Jours';
+    const redirectUrl = rawData.redirectUrl || rawData.redirect || rawData.callback;
+
+    if (!rawEmail) {
+      if (req.method === 'GET' && !rawNom) {
+        return res.json({
+          status: 'online',
+          message: 'Endpoint Webhook Inscriptions Externes M-Ris prêt.',
+          samplePayload: {
+            nom: 'Nom du client',
+            email: 'client@example.com',
+            telephone: '+225 07 00 00 00 00',
+            source: 'Site Partenaire / Campagne TikTok / Formulaire Externe'
+          }
+        });
+      }
+      return res.status(400).json({ error: 'Adresse email obligatoire pour enregistrer le compte.' });
+    }
+
+    const userEmail = String(rawEmail).trim().toLowerCase();
+    const userName = rawNom ? String(rawNom).trim() : userEmail.split('@')[0];
+    const userPhone = rawPhone ? String(rawPhone).trim() : '+225 07 00 00 00 00';
+    const password = String(rawPassword || '');
+    const sourceClean = String(rawSource).replace(/https?:\/\//, '').slice(0, 30);
+    const sourceTag = `Externe (${sourceClean || 'Web'})`;
+
+    // 1. Enregistrement centralisé
+    const result = centralStore.registerOrUpdateUser(
+      {
+        userName,
+        userEmail,
+        userPhone,
+        password,
+        device: sourceTag,
+        plan: String(rawPlan),
+        notes: `Compte inscrit via source externe : ${rawSource}`
+      },
+      'inscription_externe',
+      `Inscription reçue via Webhook externe (${sourceTag})`
+    );
+
+    // 2. Synchronisation directe immédiate dans la table Supabase 'utilisateurs'
+    const supabaseResult = await centralStore.insertUserToSupabaseUtilisateurs(result.user).catch((err: any) => ({
+      success: false,
+      message: err?.message || 'Erreur Supabase'
+    }));
+
+    // 3. Si redirection demandée (ex: soumission depuis une page HTML externe)
+    if (redirectUrl && typeof redirectUrl === 'string') {
+      return res.redirect(redirectUrl);
+    }
+
+    // 4. Si formulaire HTML classique sans accept JSON
+    const acceptsHtml = req.headers['accept'] && req.headers['accept'].includes('text/html');
+    if (req.method === 'POST' && acceptsHtml && !req.headers['x-requested-with']) {
+      return res.send(`
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Inscription Confirmée - M-Ris</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+            .card { background: #1e293b; border: 1px solid #334155; border-radius: 20px; padding: 32px; max-width: 440px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+            h1 { color: #38bdf8; font-size: 22px; margin-bottom: 8px; }
+            p { color: #94a3b8; font-size: 14px; line-height: 1.5; }
+            .btn { display: inline-block; background: #0284c7; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: bold; font-size: 14px; margin-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h1>🎉 Inscription Validée !</h1>
+            <p>Bienvenue <strong>${userName}</strong> ! Votre compte a été enregistré avec succès et votre essai gratuit de 7 jours est activé.</p>
+            <a href="/" class="btn">Accéder à l'application M-Ris</a>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Inscription externe enregistrée et synchronisée avec succès dans Supabase.',
+      user: {
+        id: result.user.id,
+        userName: result.user.userName,
+        userEmail: result.user.userEmail,
+        userPhone: result.user.userPhone,
+        role: result.user.role,
+        device: result.user.device,
+        registeredAt: result.user.registeredAt
+      },
+      source: sourceTag,
+      totalUsers: result.state.registeredUsers.length,
+      supabaseResult
+    });
+  } catch (err: any) {
+    console.error('Error during external registration:', err);
+    return res.status(500).json({ error: 'Erreur lors du traitement de l\'inscription externe' });
+  }
+});
+
+// 2d. Batch Import Endpoint (Pour importer des listes de contacts externes en masse)
+app.post('/api/mris/external/import-batch', async (req, res) => {
+  try {
+    const rawList = Array.isArray(req.body.users) ? req.body.users : [];
+    if (rawList.length === 0) {
+      return res.status(400).json({ error: 'Aucun utilisateur fourni dans la liste.' });
+    }
+
+    let importedCount = 0;
+    const importedUsers: any[] = [];
+
+    for (const item of rawList) {
+      const email = item.email || item.userEmail || item.mail;
+      if (!email || !email.includes('@')) continue;
+      const userEmail = String(email).trim().toLowerCase();
+      const userName = item.nom || item.userName || item.name || userEmail.split('@')[0];
+      const userPhone = item.telephone || item.userPhone || item.phone || '+225 07 00 00 00 00';
+      const source = item.source || 'Import Externe Lot';
+
+      const result = centralStore.registerOrUpdateUser(
+        {
+          userName: String(userName).trim(),
+          userEmail,
+          userPhone: String(userPhone).trim(),
+          password: item.password || '',
+          device: `Externe (${source})`,
+          notes: `Importé via lot externe : ${source}`
+        },
+        'inscription_externe',
+        `Inscription par import externe (${source})`
+      );
+
+      await centralStore.insertUserToSupabaseUtilisateurs(result.user).catch(() => {});
+      importedCount++;
+      importedUsers.push({ userName, userEmail, userPhone });
+    }
+
+    return res.json({
+      success: true,
+      message: `${importedCount} inscriptions externes importées et synchronisées dans Supabase avec succès.`,
+      count: importedCount,
+      users: importedUsers,
+      totalRegistered: centralStore.getState().registeredUsers.length
+    });
+  } catch (err: any) {
+    console.error('Error in batch import:', err);
+    return res.status(500).json({ error: 'Erreur lors de l\'import des inscriptions externes' });
   }
 });
 

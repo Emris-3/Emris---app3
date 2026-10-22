@@ -105,6 +105,9 @@ export default function App() {
     setLoginEvents(loadedEvents);
     setWhatsAppAlerts(loadedAlerts);
 
+    // Synchronisation immédiate avec Supabase table utilisateurs
+    centralSync.fetchDirectSupabaseUsers().catch(() => {});
+
     // Subscribe to central server updates (incoming registrations from mobile phones)
     const unsubscribe = centralSync.subscribe((syncState) => {
       if (syncState.subscriptions && syncState.subscriptions.length > 0) {

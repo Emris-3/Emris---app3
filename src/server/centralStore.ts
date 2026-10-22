@@ -392,6 +392,100 @@ class CentralStoreManager {
     return this.syncBidirectional();
   }
 
+  // --- Récupération Profonde & Synchronisation de tous les comptes ---
+  public async recoverAllAccounts(incomingUsers: RegisteredUser[] = []): Promise<{ users: RegisteredUser[]; count: number; syncedToSupabase: number }> {
+    // 1. Lire depuis Supabase
+    await this.fetchUsersFromSupabase().catch(() => {});
+
+    // 2. Extraire les utilisateurs issus des demandes d'abonnements
+    const subUsers: RegisteredUser[] = [];
+    for (const s of this.state.subscriptions) {
+      if (!s.userEmail) continue;
+      const emailLower = s.userEmail.toLowerCase().trim();
+      const isOwner = emailLower === 'camaraesther920@gmail.com';
+      subUsers.push({
+        id: 'usr-sub-' + (s.id || Date.now()),
+        userName: s.userName || emailLower.split('@')[0],
+        userEmail: emailLower,
+        userPhone: s.userPhone || '+225 07 00 00 00 00',
+        password: '',
+        role: isOwner ? 'admin' : 'client',
+        accountStatus: (isOwner || s.status === 'active') ? 'validated' : 'pending',
+        registeredAt: s.submissionDate || new Date().toISOString(),
+        lastLoginAt: s.submissionDate || new Date().toISOString(),
+        loginCount: 1,
+        device: 'Souscription / Abonnement',
+        subscriptionPlan: isOwner ? 'Propriétaire & Administrateur' : (s.planName || (s.isTrial ? 'Essai Gratuit 7 Jours' : 'Abonnement 30 Jours')),
+        subscriptionStatus: s.isTrial ? 'trial' : (s.status === 'active' ? 'active' : 'trial'),
+        paymentStatus: s.status === 'active' ? 'paid' : (s.waveTransactionId ? 'pending' : 'none'),
+        totalPaidFCFA: s.status === 'active' ? (s.amount || 35000) : 0,
+        isOnline: true,
+        notes: 'Compte extrait de la liste des abonnements'
+      });
+    }
+
+    // 3. Fusionner toutes les sources : Actuels + Entrants + Abonnements
+    const userMap = new Map<string, RegisteredUser>();
+
+    // Priorité 1 : utilisateurs actuels
+    for (const u of this.state.registeredUsers) {
+      if (!u.userEmail) continue;
+      const k = u.userEmail.toLowerCase().trim();
+      if (!this.deletedUserKeys.has(u.id) && !this.deletedUserKeys.has(k)) {
+        userMap.set(k, u);
+      }
+    }
+
+    // Priorité 2 : utilisateurs entrants du client/local
+    for (const u of incomingUsers) {
+      if (!u.userEmail) continue;
+      const k = u.userEmail.toLowerCase().trim();
+      if (this.deletedUserKeys.has(u.id) || this.deletedUserKeys.has(k)) continue;
+      const existing = userMap.get(k);
+      if (existing) {
+        userMap.set(k, {
+          ...existing,
+          ...u,
+          userName: u.userName || existing.userName,
+          userPhone: (existing.userPhone && !existing.userPhone.includes('00 00 00 00')) ? existing.userPhone : (u.userPhone || existing.userPhone),
+          accountStatus: (existing.accountStatus === 'validated' || u.accountStatus === 'validated') ? 'validated' : 'pending'
+        });
+      } else {
+        userMap.set(k, u);
+      }
+    }
+
+    // Priorité 3 : utilisateurs des abonnements
+    for (const u of subUsers) {
+      const k = u.userEmail.toLowerCase().trim();
+      if (this.deletedUserKeys.has(k)) continue;
+      if (!userMap.has(k)) {
+        userMap.set(k, u);
+      }
+    }
+
+    const mergedList = Array.from(userMap.values());
+    this.state.registeredUsers = mergedList;
+    this.saveState(this.state);
+
+    // 4. Synchroniser tous les utilisateurs avec Supabase table 'utilisateurs'
+    let syncedToSupabase = 0;
+    for (const u of mergedList) {
+      try {
+        const res = await this.insertUserToSupabaseUtilisateurs(u);
+        if (res.success) syncedToSupabase++;
+      } catch {
+        // continue
+      }
+    }
+
+    return {
+      users: mergedList,
+      count: mergedList.length,
+      syncedToSupabase
+    };
+  }
+
   // --- Public API Methods ---
 
   public getState(): CentralDatabaseState {
@@ -414,8 +508,8 @@ class CentralStoreManager {
   }
 
   public registerOrUpdateUser(
-    user: { userName: string; userEmail: string; userPhone?: string; password?: string; device?: string; plan?: string },
-    eventType: 'inscription' | 'connexion' | 'essai_7j' | 'paiement_wave' = 'inscription',
+    user: { userName: string; userEmail: string; userPhone?: string; password?: string; device?: string; plan?: string; notes?: string; accountStatus?: 'validated' | 'pending'; role?: string },
+    eventType: 'inscription' | 'connexion' | 'essai_7j' | 'paiement_wave' | 'inscription_externe' = 'inscription',
     details?: string
   ): { user: RegisteredUser; state: CentralDatabaseState } {
     const emailLower = user.userEmail.trim().toLowerCase();
@@ -443,7 +537,8 @@ class CentralStoreManager {
         loginCount: (existing.loginCount || 1) + 1,
         device: device,
         isOnline: true,
-        subscriptionPlan: user.plan || existing.subscriptionPlan
+        subscriptionPlan: user.plan || existing.subscriptionPlan,
+        notes: user.notes || existing.notes || `Compte mis à jour (${device})`
       };
       users[existingIndex] = registeredUser;
     } else {
@@ -453,8 +548,8 @@ class CentralStoreManager {
         userEmail: emailLower,
         userPhone: user.userPhone || '+225 07 00 00 00 00',
         password: user.password,
-        role: isOwner ? 'admin' : 'client',
-        accountStatus: isOwner ? 'validated' : 'pending',
+        role: isOwner ? 'admin' : (user.role === 'admin' ? 'admin' : 'client'),
+        accountStatus: isOwner ? 'validated' : (user.accountStatus || 'pending'),
         registeredAt: now,
         lastLoginAt: now,
         loginCount: 1,
@@ -464,7 +559,7 @@ class CentralStoreManager {
         paymentStatus: 'none',
         totalPaidFCFA: 0,
         isOnline: true,
-        notes: `Compte enregistré en ligne via formulaire interne (table Supabase utilisateurs)`
+        notes: user.notes || (isOwner ? 'Compte administratrice Esther' : `Compte inscrit via ${device} (table Supabase utilisateurs)`)
       };
       users.unshift(registeredUser);
     }
@@ -475,18 +570,36 @@ class CentralStoreManager {
       userEmail: emailLower,
       userPhone: user.userPhone || '+225 07 00 00 00 00',
       timestamp: now,
-      eventType: eventType,
+      eventType: (eventType === 'inscription_externe' ? 'inscription' : eventType) as any,
       device: device,
       status: 'reussie',
-      details: details || `Nouvelle activité enregistrée sur le serveur centralisé`
+      details: details || `Nouvelle inscription enregistrée (${device})`
     };
 
     const events = [newEvent, ...this.state.loginEvents].slice(0, 50);
+
+    // Notification WhatsApp pour l'administratrice Esther lors d'une inscription externe
+    const isExternal = eventType === 'inscription_externe' || device.toLowerCase().includes('externe') || device.toLowerCase().includes('webhook');
+    let alerts = [...this.state.whatsAppAlerts];
+    if (isExternal && !isOwner) {
+      const waMsg = `🔔 Nouvelle Inscription Externe Reçue !\n• Nom : ${user.userName}\n• Email : ${emailLower}\n• Tél : ${user.userPhone || 'Non renseigné'}\n• Source : ${device}\n• Date : ${new Date().toLocaleDateString('fr-FR')} ${new Date().toLocaleTimeString('fr-FR')}\nCompte enregistré dans Supabase et disponible sur votre tableau de bord.`;
+      alerts.unshift({
+        id: 'wa-ext-' + Date.now(),
+        type: 'lead_converted',
+        title: 'Nouvelle Inscription Externe Reçue 🌐',
+        message: waMsg,
+        timestamp: now,
+        sent: false,
+        whatsappUrl: `https://wa.me/message/RGXYT5LWDCTAM1?text=${encodeURIComponent(waMsg)}`
+      });
+      alerts = alerts.slice(0, 50);
+    }
 
     const newState: CentralDatabaseState = {
       ...this.state,
       registeredUsers: users,
       loginEvents: events,
+      whatsAppAlerts: alerts,
       lastUpdated: now
     };
 

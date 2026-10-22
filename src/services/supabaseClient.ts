@@ -204,24 +204,150 @@ export async function insertUserToSupabaseDirect(user: {
       return { success: true, message: `Enregistré avec succès dans la table Supabase '${SUPABASE_USERS_TABLE}'` };
     }
 
-    // 2. Try minimal payload if columns vary
+    // 2. Try minimal payload with explicit ID if columns vary
     const minimalPayload = {
+      id,
       nom: user.userName,
       telephone: user.userPhone || '+225 07 00 00 00 00',
       email: user.userEmail.toLowerCase().trim(),
       mot_de_passe: user.password || ''
     };
 
-    const res2 = await client.from(SUPABASE_USERS_TABLE).insert([minimalPayload]);
-
+    const res2 = await client.from(SUPABASE_USERS_TABLE).upsert([minimalPayload], { onConflict: 'email' });
     if (!res2.error) {
       return { success: true, message: `Enregistré dans la table Supabase '${SUPABASE_USERS_TABLE}' (champs principaux)` };
     }
 
-    return { success: false, message: res1.error?.message || res2.error?.message || 'Erreur insertion Supabase', error: res1.error?.message };
+    // 3. Simple insert as fallback
+    const res3 = await client.from(SUPABASE_USERS_TABLE).insert([minimalPayload]);
+    if (!res3.error) {
+      return { success: true, message: `Inséré dans la table Supabase '${SUPABASE_USERS_TABLE}'` };
+    }
+
+    // Si échec temporaire, mettre en file d'attente hors ligne
+    queuePendingUserForSync({
+      id,
+      userName: user.userName,
+      userEmail: user.userEmail.toLowerCase().trim(),
+      userPhone: user.userPhone,
+      password: user.password,
+      role: user.role,
+      device: user.device
+    });
+
+    return { 
+      success: false, 
+      message: res1.error?.message || res2.error?.message || res3.error?.message || 'Erreur insertion Supabase', 
+      error: res1.error?.message 
+    };
   } catch (err: any) {
+    queuePendingUserForSync({
+      id: user.id || ('usr-' + Date.now()),
+      userName: user.userName,
+      userEmail: user.userEmail.toLowerCase().trim(),
+      userPhone: user.userPhone,
+      password: user.password,
+      role: user.role,
+      device: user.device
+    });
     return { success: false, message: err?.message || 'Erreur Supabase', error: err?.message };
   }
+}
+
+// Queue for offline / pending registrations to guarantee zero loss
+const PENDING_QUEUE_KEY = 'mris_pending_users_queue';
+
+export function queuePendingUserForSync(user: any): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const raw = localStorage.getItem(PENDING_QUEUE_KEY);
+    const queue: any[] = raw ? JSON.parse(raw) : [];
+    const email = user.userEmail?.toLowerCase().trim();
+    if (!email) return;
+
+    const filtered = queue.filter(q => q.userEmail?.toLowerCase().trim() !== email);
+    filtered.push(user);
+    localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(filtered));
+  } catch {
+    // ignore
+  }
+}
+
+export function getPendingUsersQueue(): any[] {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
+  try {
+    const raw = localStorage.getItem(PENDING_QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function clearPendingUser(email: string): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const queue = getPendingUsersQueue();
+    const filtered = queue.filter(q => q.userEmail?.toLowerCase().trim() !== email.toLowerCase().trim());
+    localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(filtered));
+  } catch {
+    // ignore
+  }
+}
+
+// Flush pending sync queue
+export async function flushPendingUsersQueue(): Promise<number> {
+  const queue = getPendingUsersQueue();
+  if (!queue || queue.length === 0) return 0;
+  let syncedCount = 0;
+
+  for (const item of queue) {
+    try {
+      const res = await insertUserToSupabaseDirect({
+        id: item.id,
+        userName: item.userName || item.nom,
+        userEmail: item.userEmail || item.email,
+        userPhone: item.userPhone || item.telephone,
+        password: item.password || item.mot_de_passe,
+        role: item.role,
+        device: item.device
+      });
+      if (res.success) {
+        clearPendingUser(item.userEmail || item.email);
+        syncedCount++;
+      }
+    } catch {
+      // Continue to next
+    }
+  }
+  return syncedCount;
+}
+
+// Mass synchronize all registered users in local storage into Supabase
+export async function syncAllLocalUsersToSupabase(users: RegisteredUser[]): Promise<{ synced: number; total: number }> {
+  if (!users || users.length === 0) return { synced: 0, total: 0 };
+  let count = 0;
+
+  for (const u of users) {
+    if (!u.userEmail) continue;
+    try {
+      const res = await insertUserToSupabaseDirect({
+        id: u.id,
+        userName: u.userName,
+        userEmail: u.userEmail,
+        userPhone: u.userPhone,
+        password: u.password,
+        role: u.role,
+        device: u.device
+      });
+      if (res.success) {
+        count++;
+      }
+    } catch {
+      // continue
+    }
+  }
+
+  return { synced: count, total: users.length };
 }
 
 // Direct validate in Supabase
@@ -252,3 +378,4 @@ export async function deleteUserFromSupabaseDirect(id: string, email: string): P
     return false;
   }
 }
+
